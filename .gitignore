@@ -1,0 +1,10 @@
+bin/
+obj/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+/.tools/
+/artifacts/
+/native/win-x64/*.dll
+/native/win-x64/*.exe
+/.idea/

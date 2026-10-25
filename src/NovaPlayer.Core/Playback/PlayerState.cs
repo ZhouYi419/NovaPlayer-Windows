@@ -1,0 +1,22 @@
+namespace NovaPlayer.Core.Playback;
+
+public sealed record PlayerState
+{
+    public string? FilePath { get; init; }
+    public double Position { get; init; }
+    public double Duration { get; init; }
+    public double Speed { get; init; } = 1;
+    public double Volume { get; init; } = 70;
+    public bool IsPaused { get; init; } = true;
+    public bool IsLoading { get; init; }
+    public bool IsSeeking { get; init; }
+    public bool IsLoaded { get; init; }
+    public bool IsEnded { get; init; }
+    public bool UserMuted { get; init; }
+    public bool EffectiveMuted { get; init; }
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public string Decoder { get; init; } = "未加载";
+    public string? Error { get; init; }
+    public string? Warning { get; init; }
+}
