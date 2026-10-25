@@ -377,6 +377,7 @@
                                         <TextBlock Text="{Binding State.VideoCodec}" Foreground="{DynamicResource TextSecondary}" Margin="0,0,20,6" />
                                         <TextBlock Text="{Binding State.AudioCodec}" Foreground="{DynamicResource TextSecondary}" />
                                     </WrapPanel>
+                                    <TextBlock Text="{Binding MediaDetails}" Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,4" TextWrapping="Wrap" />
                                     <Button Content="打开文件所在位置" Command="{Binding RevealCommand}" HorizontalAlignment="Left" Padding="0,4" Foreground="#7DAAFF" />
                                 </StackPanel>
                             </ScrollViewer>
@@ -389,8 +390,7 @@
                                 </StackPanel>
                             </TabItem.Header>
                             <StackPanel>
-                                <TextBlock Text="Space 播放 / 暂停    ← → 快退 / 快进    F 全屏" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" />
-                                <TextBlock Text="[ / ] 调整倍速    M 静音    Ctrl + O 打开视频" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Shortcuts.Summary}" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" />
                                 <Button Content="查看全部快捷键  ›" Command="{Binding ShowShortcutsCommand}" HorizontalAlignment="Left" Padding="0,6" Foreground="#7DAAFF" />
                             </StackPanel>
                         </TabItem>
@@ -439,6 +439,6 @@
             </Grid>
         </Grid>
         <v:HistoryView Grid.Row="1" Grid.Column="1" Visibility="{Binding IsHistory, Converter={StaticResource BoolVisibility}}" />
-        <v:SettingsView Grid.Row="1" Grid.Column="1" Visibility="{Binding IsSettings, Converter={StaticResource BoolVisibility}}" />
+        <v:SettingsView x:Name="SettingsPage" Grid.Row="1" Grid.Column="1" Visibility="{Binding IsSettings, Converter={StaticResource BoolVisibility}}" />
     </Grid>
 </Window>

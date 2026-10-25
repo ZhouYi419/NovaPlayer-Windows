@@ -20,13 +20,13 @@
                     <GradientStop Color="#00080B12" Offset="1" />
                 </LinearGradientBrush>
             </Grid.Background>
-            <Grid Margin="20,18,18,0" VerticalAlignment="Top">
+            <Grid x:Name="TopContent" Margin="20,18,18,0" VerticalAlignment="Top">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Margin="0,0,12,0" IsHitTestVisible="False">
-                    <TextBlock Text="{Binding FileName}" FontSize="17" FontWeight="SemiBold" Foreground="White" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="OverlayTitle" Text="{Binding FileName}" FontSize="17" FontWeight="SemiBold" Foreground="White" TextTrimming="CharacterEllipsis" />
                     <TextBlock x:Name="MetadataLabel" Text="{Binding VideoInfo}" Margin="0,6,0,0" Foreground="#B6C0D2" FontSize="12" />
                 </StackPanel>
                 <StackPanel x:Name="TopTools" Grid.Column="1" Orientation="Horizontal">
@@ -92,14 +92,14 @@
                     <GradientStop Color="#EE080B12" Offset="1" />
                 </LinearGradientBrush>
             </Grid.Background>
-            <StackPanel VerticalAlignment="Bottom" Margin="20,0,20,16">
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8" Visibility="{Binding HasResumePrompt, Converter={StaticResource BoolVisibility}}">
+            <StackPanel x:Name="BottomContent" VerticalAlignment="Bottom" Margin="20,0,20,16">
+                <StackPanel x:Name="ResumeBanner" Orientation="Horizontal" Margin="0,0,0,8" Visibility="{Binding HasResumePrompt, Converter={StaticResource BoolVisibility}}">
                     <TextBlock Text="{Binding ResumePrompt}" Foreground="White" FontSize="12" VerticalAlignment="Center" />
                     <Button Content="从头播放" Command="{Binding RestartCommand}" Foreground="#7DAAFF" Margin="8,0,0,0" Padding="8,3" />
                 </StackPanel>
                 <TextBlock x:Name="PlayerStatus" Text="{Binding Status}" Foreground="#91A1BB" FontSize="11" Margin="0,0,0,10" TextTrimming="CharacterEllipsis" />
                 <DockPanel>
-                    <TextBlock Text="{Binding TimeText}" Width="152" VerticalAlignment="Center" Foreground="White" FontSize="12" />
+                    <TextBlock x:Name="TimeLabel" Text="{Binding TimeText}" Width="152" VerticalAlignment="Center" Foreground="White" FontSize="12" />
                     <Slider x:Name="SeekSlider" Minimum="0" Maximum="{Binding SeekMaximum}" Value="{Binding State.Position, Mode=OneWay}" IsMoveToPointEnabled="True" IsEnabled="{Binding State.IsLoaded}" PreviewMouseLeftButtonDown="Seek_Start" PreviewMouseLeftButtonUp="Seek_End" LostMouseCapture="Seek_LostCapture" PreviewMouseMove="Seek_Hover" Height="20" VerticalAlignment="Center" />
                 </DockPanel>
                 <Grid x:Name="NormalControls" Margin="0,12,0,0">
@@ -120,19 +120,19 @@
                         <Button Style="{StaticResource VideoButton}" Command="{Binding PreviousCommand}" ToolTip="上一个视频">
                             <c:Icon Kind="previous" Width="17" Height="17" />
                         </Button>
-                        <Button Style="{StaticResource VideoButton}" Command="{Binding BackwardCommand}" ToolTip="快退 10 秒">
+                        <Button Style="{StaticResource VideoButton}" Command="{Binding BackwardCommand}" ToolTip="{Binding Preferences.SeekInterval, StringFormat='快退 {0:0} 秒'}">
                             <Grid>
                                 <c:Icon Kind="back" />
-                                <TextBlock Text="10" FontSize="8" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,3,0,0" />
+                                <TextBlock Text="{Binding Preferences.SeekInterval, StringFormat={}{0:0}}" FontSize="8" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,3,0,0" />
                             </Grid>
                         </Button>
-                        <Button Style="{StaticResource VideoButton}" Command="{Binding TogglePauseCommand}" Width="48" Height="40" ToolTip="播放 / 暂停（Space）">
+                        <Button Style="{StaticResource VideoButton}" Command="{Binding TogglePauseCommand}" Width="48" Height="40" ToolTip="{Binding Shortcuts.Items[0].Display, StringFormat='播放 / 暂停（{0}）'}">
                             <c:Icon Kind="{Binding PlayIcon}" Width="27" Height="27" />
                         </Button>
-                        <Button Style="{StaticResource VideoButton}" Command="{Binding ForwardCommand}" ToolTip="快进 10 秒">
+                        <Button Style="{StaticResource VideoButton}" Command="{Binding ForwardCommand}" ToolTip="{Binding Preferences.SeekInterval, StringFormat='快进 {0:0} 秒'}">
                             <Grid>
                                 <c:Icon Kind="forward" />
-                                <TextBlock Text="10" FontSize="8" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,3,0,0" />
+                                <TextBlock Text="{Binding Preferences.SeekInterval, StringFormat={}{0:0}}" FontSize="8" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,3,0,0" />
                             </Grid>
                         </Button>
                         <Button Style="{StaticResource VideoButton}" Command="{Binding NextCommand}" ToolTip="下一个视频">
@@ -140,7 +140,7 @@
                         </Button>
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
-                        <Button Style="{StaticResource VideoButton}" Command="{Binding ToggleMuteCommand}" ToolTip="静音（M）">
+                        <Button Style="{StaticResource VideoButton}" Command="{Binding ToggleMuteCommand}" ToolTip="{Binding Shortcuts.Items[7].Display, StringFormat='静音（{0}）'}">
                             <c:Icon Kind="{Binding VolumeIcon}" />
                         </Button>
                         <Slider x:Name="VolumeSlider" Width="72" Minimum="0" Maximum="100" Value="{Binding State.Volume, Mode=OneWay}" ValueChanged="Volume_Changed" VerticalAlignment="Center" Margin="4,0,14,0" />
@@ -150,12 +150,12 @@
                                 <c:Icon Kind="down" Width="12" Height="12" Margin="10,0,0,0" />
                             </StackPanel>
                         </Button>
-                        <Button Style="{StaticResource VideoButton}" Command="{Binding FullscreenCommand}" ToolTip="全屏（F）" Margin="12,0,0,0">
+                        <Button Style="{StaticResource VideoButton}" Command="{Binding FullscreenCommand}" ToolTip="{Binding Shortcuts.Items[5].Display, StringFormat='全屏（{0}）'}" Margin="12,0,0,0">
                             <c:Icon Kind="fullscreen" />
                         </Button>
                     </StackPanel>
                 </Grid>
-                <StackPanel x:Name="MiniControls" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0" Visibility="{Binding IsMiniPlayer, Converter={StaticResource BoolVisibility}}">
+                <StackPanel x:Name="MiniControls" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0" Background="#B0080B12" Visibility="{Binding IsMiniPlayer, Converter={StaticResource BoolVisibility}}">
                     <Button Style="{StaticResource VideoButton}" Command="{Binding BackwardCommand}">
                         <c:Icon Kind="back" />
                     </Button>
@@ -165,9 +165,34 @@
                     <Button Style="{StaticResource VideoButton}" Command="{Binding ForwardCommand}">
                         <c:Icon Kind="forward" />
                     </Button>
+                    <Button Style="{StaticResource VideoButton}" Command="{Binding ToggleMuteCommand}" ToolTip="静音">
+                        <c:Icon Kind="{Binding VolumeIcon}" Width="18" Height="18" />
+                    </Button>
+                    <Button x:Name="MiniSpeedButton" Click="Speed_Click" Content="{Binding SpeedText}" Foreground="White" MinWidth="54" Padding="6,4" ToolTip="播放倍速" />
+                    <Button Style="{StaticResource VideoButton}" Click="Subtitle_Click" ToolTip="字幕设置">
+                        <c:Icon Kind="subtitles" Width="18" Height="18" />
+                    </Button>
+                    <Button Style="{StaticResource VideoButton}" Click="More_Click" ToolTip="音轨与更多操作">
+                        <c:Icon Kind="more" Width="18" Height="18" />
+                    </Button>
                 </StackPanel>
             </StackPanel>
         </Grid>
+        <Border VerticalAlignment="Center" Background="#E0182132" CornerRadius="6" Padding="8" Margin="10">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsMiniPlayer}" Value="False">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding State.OperationWarning}" Value="{x:Null}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock Text="{Binding State.OperationWarning}" TextWrapping="Wrap" Foreground="#FFD39A" FontSize="11" IsHitTestVisible="False" />
+        </Border>
         <Border VerticalAlignment="Bottom" Background="#182132" CornerRadius="8" Padding="12,6" Margin="16" Visibility="{Binding ShowEmpty, Converter={StaticResource BoolVisibility}}">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Command="{Binding ToggleInformationCommand}" Content="底部信息" Foreground="#A7B2C6" Padding="8,3" />
@@ -175,6 +200,24 @@
                 <TextBlock Text="{Binding Status}" Foreground="#91A1BB" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="11" />
             </DockPanel>
         </Border>
+        <Grid Visibility="{Binding IsMiniPlayer, Converter={StaticResource BoolVisibility}}">
+            <Grid.Resources>
+                <Style x:Key="MiniResizeHandle" TargetType="Thumb">
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Focusable" Value="False"/>
+                    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Thumb"><Border Background="{TemplateBinding Background}"/></ControlTemplate></Setter.Value></Setter>
+                </Style>
+            </Grid.Resources>
+            <Thumb Style="{StaticResource MiniResizeHandle}" Width="6" HorizontalAlignment="Left" Cursor="SizeWE" Tag="Left" DragDelta="MiniResize_DragDelta"/>
+            <Thumb Style="{StaticResource MiniResizeHandle}" Width="6" HorizontalAlignment="Right" Cursor="SizeWE" Tag="Right" DragDelta="MiniResize_DragDelta"/>
+            <Thumb Style="{StaticResource MiniResizeHandle}" Height="6" VerticalAlignment="Top" Cursor="SizeNS" Tag="Top" DragDelta="MiniResize_DragDelta"/>
+            <Thumb Style="{StaticResource MiniResizeHandle}" Height="6" VerticalAlignment="Bottom" Cursor="SizeNS" Tag="Bottom" DragDelta="MiniResize_DragDelta"/>
+            <Thumb Style="{StaticResource MiniResizeHandle}" Width="12" Height="12" HorizontalAlignment="Left" VerticalAlignment="Top" Cursor="SizeNWSE" Tag="TopLeft" DragDelta="MiniResize_DragDelta"/>
+            <Thumb Style="{StaticResource MiniResizeHandle}" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Top" Cursor="SizeNESW" Tag="TopRight" DragDelta="MiniResize_DragDelta"/>
+            <Thumb Style="{StaticResource MiniResizeHandle}" Width="12" Height="12" HorizontalAlignment="Left" VerticalAlignment="Bottom" Cursor="SizeNESW" Tag="BottomLeft" DragDelta="MiniResize_DragDelta"/>
+            <Thumb x:Name="MiniResizeCorner" Style="{StaticResource MiniResizeHandle}" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Bottom" Cursor="SizeNWSE" Tag="BottomRight" DragDelta="MiniResize_DragDelta"/>
+            <Path Data="M1,10 L10,1 M5,10 L10,5" Stroke="#8091A1BB" StrokeThickness="1" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Bottom" IsHitTestVisible="False"/>
+        </Grid>
         <Popup x:Name="SpeedPopup" PlacementTarget="{Binding ElementName=SpeedButton}" Placement="Top" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
             <Border Background="#1C2434" BorderBrush="#2B3548" BorderThickness="1" CornerRadius="8" Padding="16" Width="270">
                 <StackPanel>

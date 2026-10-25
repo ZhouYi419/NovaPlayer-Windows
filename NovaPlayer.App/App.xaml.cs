@@ -24,16 +24,18 @@ public partial class App : Application
                 bool verify = e.Args.Length >= 3 && e.Args[0].StartsWith("--verify", StringComparison.Ordinal);
                 if (verify) ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 string profileName = verify && e.Args[0].StartsWith("--verify-library-", StringComparison.Ordinal)
-                    ? "profile" : verify ? Path.GetFileNameWithoutExtension(e.Args[2]) + "-profile" : "";
+                    ? "profile" : verify && e.Args[0].StartsWith("--verify-experience", StringComparison.Ordinal) ? "experience-profile"
+                    : verify ? Path.GetFileNameWithoutExtension(e.Args[2]) + "-profile" : "";
                 string root = verify ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(e.Args[2]))!, profileName)
                     : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NovaPlayer");
                 string preferencesPath = Path.Combine(root, "settings", "appearance.json");
                 var preferences = await PreferencesService.LoadAsync(preferencesPath);
+                var shortcuts = await ShortcutService.LoadAsync(Path.Combine(root, "settings", "shortcuts.json"));
                 var store = new SqlitePlaybackStore(Path.Combine(root, "data", "player.db"));
                 try { await store.InitializeAsync(); } catch (Exception ex) { Log.Error(ex, "数据库初始化失败，将继续启动播放器"); }
                 var thumbnails = new ThumbnailService(Path.Combine(AppContext.BaseDirectory, "native", "win-x64", "ffmpeg.exe"), Path.Combine(root, "cache", "thumbnails"));
                 await thumbnails.CleanAsync();
-                MainWindow = new MainWindow(engine, e.Args, preferences, store, thumbnails); MainWindow.Show();
+                MainWindow = new MainWindow(engine, e.Args, preferences, store, thumbnails, shortcuts); MainWindow.Show();
             }
             catch { engine.Dispose(); throw; }
         }

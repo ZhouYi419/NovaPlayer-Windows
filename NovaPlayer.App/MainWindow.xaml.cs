@@ -3,6 +3,8 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using System.Windows.Shell;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -27,8 +29,9 @@ public partial class MainWindow : Window
     private readonly PlayerViewModel _viewModel;
     private readonly ThemeService _theme;
     private PlaybackOverlay? _overlay;
-    private WindowState _previousState;
-    private Rect _normalBounds;
+    private WindowGeometry? _beforeFullscreen, _beforeMini;
+    private string _beforeMiniPage = "首页";
+    private bool _presentationChanging;
     private bool _closing, _dialogOpen;
     private Point _dragOrigin;
     private bool _closeCompleted;
@@ -37,17 +40,18 @@ public partial class MainWindow : Window
     internal PlayerViewModel ViewModel => _viewModel;
     internal VideoHost VideoHost => _host;
 
-    public MainWindow(MpvPlayerEngine engine, string[] args, PreferencesService preferences, IPlaybackStore store, ThumbnailService thumbnails)
+    public MainWindow(MpvPlayerEngine engine, string[] args, PreferencesService preferences, IPlaybackStore store, ThumbnailService thumbnails, ShortcutService shortcuts)
     {
         _engine = engine; _args = args;
         InitializeComponent();
         _theme = new ThemeService(preferences);
-        _viewModel = new PlayerViewModel(engine, Dispatcher, preferences, store, thumbnails); DataContext = _viewModel;
+        _viewModel = new PlayerViewModel(engine, Dispatcher, preferences, store, thumbnails, shortcuts); DataContext = _viewModel;
         _viewModel.OpenRequested += (_, _) => OpenFiles();
         _viewModel.OpenFolderRequested += (_, _) => OpenFolder();
         _viewModel.FullscreenRequested += (_, _) => ToggleFullscreen();
         _viewModel.MiniPlayerRequested += (_, _) => ToggleMiniPlayer();
         _viewModel.SubtitleRequested += (_, _) => OpenSubtitle();
+        _viewModel.ShortcutSettingsRequested += (_, _) => Dispatcher.BeginInvoke(() => SettingsPage.ShowShortcuts(), DispatcherPriority.Loaded);
         _viewModel.LocateRequested += Relocate;
         _viewModel.Confirm = message => WithDialog(() => MessageBox.Show(this, message, "Nova Player", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes);
         _viewModel.PropertyChanged += ViewModelChanged;
@@ -57,6 +61,7 @@ public partial class MainWindow : Window
         VideoContainer.Children.Add(_host);
         Loaded += (_, _) =>
         {
+            if (preferences.RememberWindow && preferences.MainGeometry is { } geometry) WindowPlacement.Apply(this, geometry, 960, 620);
             _overlay = new PlaybackOverlay(this, _viewModel, VideoContainer) { Owner = this };
             _overlay.Show(); ApplyLayout();
         };
@@ -75,7 +80,9 @@ public partial class MainWindow : Window
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             if (_args.Length >= 3 && _args[0].StartsWith("--verify", StringComparison.Ordinal))
             {
-                int exit = _args[0].StartsWith("--verify-library-", StringComparison.Ordinal)
+                int exit = _args[0].StartsWith("--verify-experience", StringComparison.Ordinal)
+                    ? await StageFourVerification.RunAsync(this, _engine, renderer, _overlay!, _args[0], _args[1], _args[2])
+                    : _args[0].StartsWith("--verify-library-", StringComparison.Ordinal)
                     ? await StageThreeVerification.RunAsync(this, _engine, renderer, _overlay!, _args[0], _args[1], _args[2])
                     : _args[0] == "--verify-shell"
                     ? await StageTwoVerification.RunAsync(this, _engine, renderer, _overlay!, _args[1], _args[2])
@@ -153,42 +160,46 @@ public partial class MainWindow : Window
     private void Player_KeyDown(object sender, KeyEventArgs e) => HandleKey(e);
     internal void HandleKey(KeyEventArgs e)
     {
-        if (Keyboard.FocusedElement is TextBox or ComboBox or ComboBoxItem || !_viewModel.IsReady) return;
-        var modifiers = Keyboard.Modifiers;
-        if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.O) { OpenFolder(); e.Handled = true; return; }
-        if (modifiers == ModifierKeys.Control)
+        Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (TryHandleShortcut(key, Keyboard.Modifiers, e.IsRepeat, Keyboard.FocusedElement as DependencyObject)) e.Handled = true;
+    }
+    internal bool TryHandleShortcut(Key key, ModifierKeys modifiers, bool repeated, DependencyObject? focus = null)
+    {
+        if (!_viewModel.IsReady || IsEditing(focus)) return false;
+        var action = _viewModel.Shortcuts.Resolve(key, modifiers, repeated);
+        switch (action)
         {
-            switch (e.Key)
-            {
-                case Key.O: OpenFiles(); break;
-                case Key.Right: _viewModel.NextCommand.Execute(null); break;
-                case Key.Left: _viewModel.PreviousCommand.Execute(null); break;
-                default: return;
-            }
-            e.Handled = true; return;
-        }
-        if (modifiers != ModifierKeys.None) return;
-        switch (e.Key)
-        {
-            case Key.Space: _viewModel.TogglePauseCommand.Execute(null); break;
-            case Key.Left: _viewModel.BackwardCommand.Execute(null); break;
-            case Key.Right: _viewModel.ForwardCommand.Execute(null); break;
-            case Key.Up: _viewModel.ChangeVolume(_viewModel.State.Volume + 5); break;
-            case Key.Down: _viewModel.ChangeVolume(_viewModel.State.Volume - 5); break;
-            case Key.M: _viewModel.ToggleMuteCommand.Execute(null); break;
-            case Key.F: ToggleFullscreen(); break;
-            case Key.Escape:
+            case ShortcutAction.TogglePause: _viewModel.TogglePauseCommand.Execute(null); break;
+            case ShortcutAction.Backward: _viewModel.BackwardCommand.Execute(null); break;
+            case ShortcutAction.Forward: _viewModel.ForwardCommand.Execute(null); break;
+            case ShortcutAction.VolumeUp: _viewModel.ChangeVolume(_viewModel.State.Volume + 5); break;
+            case ShortcutAction.VolumeDown: _viewModel.ChangeVolume(_viewModel.State.Volume - 5); break;
+            case ShortcutAction.ToggleMute: _viewModel.ToggleMuteCommand.Execute(null); break;
+            case ShortcutAction.Fullscreen: ToggleFullscreen(); break;
+            case ShortcutAction.MiniPlayer: ToggleMiniPlayer(); break;
+            case ShortcutAction.ToggleSubtitles: _viewModel.ToggleSubtitlesCommand.Execute(null); break;
+            case ShortcutAction.OpenFile: OpenFiles(); break;
+            case ShortcutAction.OpenFolder: OpenFolder(); break;
+            case ShortcutAction.Next: _viewModel.NextCommand.Execute(null); break;
+            case ShortcutAction.Previous: _viewModel.PreviousCommand.Execute(null); break;
+            case ShortcutAction.Slower: _viewModel.ChangeSpeed(Math.Max(PlaybackPolicy.MinimumSpeed, _viewModel.State.Speed - .25)); break;
+            case ShortcutAction.Faster: _viewModel.ChangeSpeed(Math.Min(PlaybackPolicy.MaximumSpeed, _viewModel.State.Speed + .25)); break;
+            case ShortcutAction.NormalSpeed: _viewModel.ResetSpeedCommand.Execute(null); break;
+            case ShortcutAction.ExitView:
                 if (_overlay?.CloseMenu() == true) break;
                 if (_viewModel.IsMiniPlayer) ToggleMiniPlayer();
                 else if (_viewModel.IsFullscreen) ToggleFullscreen();
                 else _viewModel.SearchText = "";
                 break;
-            case Key.OemOpenBrackets: _viewModel.ChangeSpeed(Math.Max(PlaybackPolicy.MinimumSpeed, _viewModel.State.Speed - 0.25)); break;
-            case Key.OemCloseBrackets: _viewModel.ChangeSpeed(Math.Min(PlaybackPolicy.MaximumSpeed, _viewModel.State.Speed + 0.25)); break;
-            case Key.OemPipe: _viewModel.ResetSpeedCommand.Execute(null); break;
-            default: return;
+            default: return false;
         }
-        e.Handled = true; _overlay?.ShowControls();
+        _overlay?.ShowControls(); return true;
+    }
+    internal static bool IsEditing(DependencyObject? focus)
+    {
+        for (var current = focus; current is not null; current = current is Visual ? VisualTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current))
+            if (current is TextBoxBase or PasswordBox or ComboBox or ComboBoxItem) return true;
+        return false;
     }
     internal void ToggleFullscreen()
     {
@@ -196,35 +207,63 @@ public partial class MainWindow : Window
         _viewModel.CurrentPage = "首页"; _overlay?.CloseMenu();
         if (!_viewModel.IsFullscreen)
         {
-            _previousState = WindowState; WindowState = WindowState.Normal;
+            _beforeFullscreen = WindowPlacement.Capture(this); WindowState = WindowState.Normal;
             _viewModel.IsFullscreen = true; ResizeMode = ResizeMode.NoResize;
             WindowState = WindowState.Maximized;
         }
         else
         {
             WindowState = WindowState.Normal; _viewModel.IsFullscreen = false;
-            ResizeMode = ResizeMode.CanResize; WindowState = _previousState;
+            ResizeMode = ResizeMode.CanResize;
+            if (_beforeFullscreen is { } geometry) WindowPlacement.Apply(this, geometry, 960, 620, true);
         }
         ApplyLayout(); _overlay?.ShowControls();
     }
     internal void ToggleMiniPlayer()
     {
-        if (!_viewModel.IsMiniPlayer)
+        if (_presentationChanging || _closing) return;
+        _presentationChanging = true;
+        try
         {
-            if (!_viewModel.State.IsLoaded) { _viewModel.Notice = "请先打开视频。"; return; }
-            if (_viewModel.IsFullscreen) ToggleFullscreen();
-            _normalBounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
-            _previousState = WindowState; WindowState = WindowState.Normal;
-            _viewModel.CurrentPage = "首页"; _viewModel.IsMiniPlayer = true;
-            MinWidth = 280; MinHeight = 180; Width = 400; Height = 225;
+            if (!_viewModel.IsMiniPlayer)
+            {
+                if (!_viewModel.State.IsLoaded) { _viewModel.Notice = "请先打开视频。"; return; }
+                if (_viewModel.IsFullscreen) ToggleFullscreen();
+                _beforeMini = WindowPlacement.Capture(this); _beforeMiniPage = _viewModel.CurrentPage;
+                _overlay?.CloseMenu(); WindowState = WindowState.Normal;
+                _viewModel.CurrentPage = "首页"; _viewModel.IsMiniPlayer = true;
+                MinWidth = 280; MinHeight = 158;
+                Rect area = WindowPlacement.WorkArea(this);
+                var target = _viewModel.Preferences.MiniGeometry ?? new WindowGeometry(area.Right - 424, area.Bottom - 249, 400, 225);
+                WindowPlacement.Apply(this, target with { Maximized = false }, 280, 158);
+            }
+            else
+            {
+                _viewModel.Preferences.MiniGeometry = WindowPlacement.Capture(this) with { Maximized = false };
+                _overlay?.CloseMenu(); _viewModel.IsMiniPlayer = false; MinWidth = 960; MinHeight = 620;
+                if (_beforeMini is { } geometry) WindowPlacement.Apply(this, geometry, 960, 620, true);
+                _viewModel.CurrentPage = _beforeMiniPage;
+                _ = _viewModel.Preferences.SaveAsync();
+            }
         }
-        else
+        catch (Exception ex)
         {
+            Log.Error(ex, "画中画布局切换失败，恢复主窗口");
             _viewModel.IsMiniPlayer = false; MinWidth = 960; MinHeight = 620;
-            Left = _normalBounds.Left; Top = _normalBounds.Top; Width = _normalBounds.Width; Height = _normalBounds.Height;
-            WindowState = _previousState;
+            if (_beforeMini is { } geometry) WindowPlacement.Apply(this, geometry, 960, 620, true);
+            _viewModel.Notice = "画中画切换失败，已保留主窗口与当前播放。";
         }
-        ApplyLayout(); _overlay?.ShowControls();
+        finally { _presentationChanging = false; ApplyLayout(); _overlay?.ShowControls(); }
+    }
+    internal void ResizeMiniPlayer(string edges, double horizontal, double vertical)
+    {
+        if (!_viewModel.IsMiniPlayer || !double.IsFinite(horizontal) || !double.IsFinite(vertical)) return;
+        double width = Width, height = Height, left = Left, top = Top;
+        if (edges.Contains("Left", StringComparison.Ordinal)) { width = Math.Max(MinWidth, Width - horizontal); left += Width - width; }
+        if (edges.Contains("Right", StringComparison.Ordinal)) width = Math.Max(MinWidth, Width + horizontal);
+        if (edges.Contains("Top", StringComparison.Ordinal)) { height = Math.Max(MinHeight, Height - vertical); top += Height - height; }
+        if (edges.Contains("Bottom", StringComparison.Ordinal)) height = Math.Max(MinHeight, Height + vertical);
+        Left = left; Top = top; Width = width; Height = height;
     }
     private void ViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -317,6 +356,8 @@ public partial class MainWindow : Window
     internal Task CloseSessionAsync() => _shutdownTask ??= CloseCoreAsync();
     private async Task CloseCoreAsync()
     {
+        _viewModel.Preferences.MainGeometry = _viewModel.IsMiniPlayer ? _beforeMini : _viewModel.IsFullscreen ? _beforeFullscreen : WindowPlacement.Capture(this);
+        if (_viewModel.IsMiniPlayer) _viewModel.Preferences.MiniGeometry = WindowPlacement.Capture(this) with { Maximized = false };
         _closing = true; _overlay?.Close();
         try { await _viewModel.ShutdownAsync(); }
         catch (Exception ex) { Log.Error(ex, "退出时保存播放记录失败"); }

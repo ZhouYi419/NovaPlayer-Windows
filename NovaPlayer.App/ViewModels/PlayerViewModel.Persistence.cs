@@ -5,6 +5,7 @@ using NovaPlayer.Core.Library;
 using NovaPlayer.Core.Playback;
 using NovaPlayer.Infrastructure.FileSystem;
 using Serilog;
+using NovaPlayer.App.Services;
 
 namespace NovaPlayer.App.ViewModels;
 
@@ -79,6 +80,8 @@ public partial class PlayerViewModel
     }
     private void PreferenceChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(PreferencesService.AutoLoadSubtitles) or nameof(PreferencesService.PitchCorrection) or nameof(PreferencesService.HardwareDecoding) or nameof(PreferencesService.AutoMuteHighSpeed)) ApplyPlaybackPreferences();
+        if (e.PropertyName == nameof(PreferencesService.SubtitleSize)) Execute(() => _engine.SetSubtitleSize(Preferences.SubtitleSize));
         if (e.PropertyName == nameof(Services.PreferencesService.Mode))
         {
             OnPropertyChanged(nameof(PlaybackModeIndex));
@@ -187,7 +190,8 @@ public partial class PlayerViewModel
                 CurrentVideo = item; CurrentPage = "首页"; SearchText = "";
                 if (!automatic) _failedAutomaticPaths.Clear();
                 _engine.SetSpeed(Preferences.RememberSpeed && item.HasSpeed ? item.Speed : Preferences.DefaultSpeed);
-                _engine.Open(item.Path);
+                // 同步的加载前配置只在线程池完成，确认应用后再让 libmpv 打开媒体。
+                await Task.Run(() => _engine.Open(item.Path), _lifetime.Token);
                 _automaticSession = automatic ? _engine.State.SessionId : 0;
                 RefreshHistory(); await PersistPlaylistAsync();
                 Notice = resume > 0 ? $"正在恢复至 {FormatTime(resume)}…" : "视频已打开";
@@ -269,6 +273,7 @@ public partial class PlayerViewModel
         {
             await SaveCurrentAsync(); await PersistPlaylistAsync();
             await Preferences.SaveAsync();
+            await Shortcuts.SaveAsync();
             await _thumbnails.DisposeAsync();
             await PersistAsync(_store.FlushAsync);
         }

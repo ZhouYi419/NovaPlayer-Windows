@@ -11,7 +11,19 @@ internal static unsafe class MpvNative
         NativeLibrary.SetDllImportResolver(typeof(MpvNative).Assembly, (name, _, _) =>
             name == Library ? NativeLibrary.Load(Path.Combine(AppContext.BaseDirectory, "native", "win-x64", Library)) : 0);
     }
-    internal const int String = 1, Flag = 3, Int64 = 4, Double = 5;
+    internal const int String = 1, Flag = 3, Int64 = 4, Double = 5, Node = 6, NodeArray = 7, NodeMap = 8;
+
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    internal struct NodeValue
+    {
+        [FieldOffset(0)] public nint Pointer;
+        [FieldOffset(0)] public long Integer;
+        [FieldOffset(0)] public int Boolean;
+        [FieldOffset(0)] public double Number;
+        [FieldOffset(8)] public int Format;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct NodeList { public int Count; public nint Values, Keys; }
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct Event { public int Id, Error; public ulong UserData; public nint Data; }
@@ -38,6 +50,7 @@ internal static unsafe class MpvNative
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern int mpv_set_option_string(nint handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern int mpv_observe_property(nint handle, ulong id, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int format);
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern int mpv_set_property_async(nint handle, ulong id, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int format, void* value);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern int mpv_set_property(nint handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int format, void* value);
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern int mpv_command_async(nint handle, ulong id, nint args);
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern nint mpv_error_string(int error);
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern int mpv_request_log_messages(nint handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string level);

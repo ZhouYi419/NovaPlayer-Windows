@@ -3,6 +3,7 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Serilog;
 using NovaPlayer.Core.Playback;
+using NovaPlayer.Core.Presentation;
 
 namespace NovaPlayer.App.Services;
 
@@ -20,6 +21,16 @@ public partial class PreferencesService : ObservableObject
     [ObservableProperty] private bool _rememberSpeed = true;
     [ObservableProperty] private string _resumeMode = "自动续播";
     [ObservableProperty] private PlaybackMode _mode = PlaybackMode.Sequential;
+    [ObservableProperty] private bool _autoLoadSubtitles = true;
+    [ObservableProperty] private bool _pitchCorrection = true;
+    [ObservableProperty] private bool _hardwareDecoding = true;
+    [ObservableProperty] private bool _autoMuteHighSpeed = true;
+    [ObservableProperty] private double _subtitleSize = 55;
+    [ObservableProperty] private double _seekInterval = 10;
+    [ObservableProperty] private double _controlsHideSeconds = 3;
+    [ObservableProperty] private bool _rememberWindow = true;
+    public WindowGeometry? MainGeometry { get; set; }
+    public WindowGeometry? MiniGeometry { get; set; }
     public event EventHandler<string>? SaveFailed;
     internal string StoragePath => _path;
 
@@ -42,6 +53,16 @@ public partial class PreferencesService : ObservableObject
                 service.RememberSpeed = data.RememberSpeed;
                 service.ResumeMode = !data.AutoResume || data.ResumeMode == "始终从头播放" ? "始终从头播放" : data.ResumeMode == "询问后续播" ? data.ResumeMode : "自动续播";
                 service.Mode = Enum.IsDefined(data.Mode) ? data.Mode : PlaybackMode.Sequential;
+                service.AutoLoadSubtitles = data.AutoLoadSubtitles;
+                service.PitchCorrection = data.PitchCorrection;
+                service.HardwareDecoding = data.HardwareDecoding;
+                service.AutoMuteHighSpeed = data.AutoMuteHighSpeed;
+                service.SubtitleSize = double.IsFinite(data.SubtitleSize) && data.SubtitleSize is >= 20 and <= 90 ? data.SubtitleSize : 55;
+                service.SeekInterval = double.IsFinite(data.SeekInterval) && data.SeekInterval is >= 1 and <= 120 ? data.SeekInterval : 10;
+                service.ControlsHideSeconds = double.IsFinite(data.ControlsHideSeconds) && data.ControlsHideSeconds is >= 1 and <= 10 ? data.ControlsHideSeconds : 3;
+                service.RememberWindow = data.RememberWindow;
+                service.MainGeometry = data.MainGeometry?.IsValid == true ? data.MainGeometry : null;
+                service.MiniGeometry = data.MiniGeometry?.IsValid == true ? data.MiniGeometry : null;
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -56,7 +77,8 @@ public partial class PreferencesService : ObservableObject
     }
     public async Task SaveAsync()
     {
-        var data = new PreferenceData(AutoResume, DefaultSpeed, PlaylistExpanded, InformationExpanded, AlwaysOnTop, Theme, RememberSpeed, ResumeMode, Mode);
+        var data = new PreferenceData(AutoResume, DefaultSpeed, PlaylistExpanded, InformationExpanded, AlwaysOnTop, Theme, RememberSpeed, ResumeMode, Mode,
+            AutoLoadSubtitles, PitchCorrection, HardwareDecoding, AutoMuteHighSpeed, SubtitleSize, SeekInterval, ControlsHideSeconds, RememberWindow, MainGeometry, MiniGeometry);
         await _writeGate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -72,6 +94,18 @@ public partial class PreferencesService : ObservableObject
     partial void OnAutoResumeChanged(bool value)
     { if (!value) ResumeMode = "始终从头播放"; else if (ResumeMode == "始终从头播放") ResumeMode = "自动续播"; }
     partial void OnResumeModeChanged(string value) => AutoResume = value != "始终从头播放";
+    public void Reset()
+    {
+        AutoResume = true; DefaultSpeed = 1; PlaylistExpanded = InformationExpanded = true; AlwaysOnTop = false; Theme = "深色";
+        RememberSpeed = true; ResumeMode = "自动续播"; Mode = PlaybackMode.Sequential;
+        AutoLoadSubtitles = PitchCorrection = HardwareDecoding = AutoMuteHighSpeed = true;
+        SubtitleSize = 55; SeekInterval = 10; ControlsHideSeconds = 3; RememberWindow = true;
+        MainGeometry = MiniGeometry = null;
+        _ = SaveAsync();
+    }
     private sealed record PreferenceData(bool AutoResume, double DefaultSpeed, bool PlaylistExpanded, bool InformationExpanded, bool AlwaysOnTop, string Theme,
-        bool RememberSpeed = true, string ResumeMode = "自动续播", PlaybackMode Mode = PlaybackMode.Sequential);
+        bool RememberSpeed = true, string ResumeMode = "自动续播", PlaybackMode Mode = PlaybackMode.Sequential,
+        bool AutoLoadSubtitles = true, bool PitchCorrection = true, bool HardwareDecoding = true, bool AutoMuteHighSpeed = true,
+        double SubtitleSize = 55, double SeekInterval = 10, double ControlsHideSeconds = 3, bool RememberWindow = true,
+        WindowGeometry? MainGeometry = null, WindowGeometry? MiniGeometry = null);
 }

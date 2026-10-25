@@ -1,5 +1,7 @@
 # 第三阶段逐环节代码链路
 
+本文保留第三阶段代码说明；第四阶段扩展了接口、配置与窗口交互，当前高级播放流程见 [第四阶段说明](stage4-code-walkthrough.md)。
+
 以下片段均来自当前实现，省略的辅助处理可在对应文件查看。SQLite 是 Microsoft.Data.Sqlite 提供的数据库访问依赖；`IPlaybackStore` 与 `IPlayerEngine` 是本项目自己的接口，分别隔离数据库实现和第三方 libmpv。
 
 ## 1. 启动与恢复：建立基础设施，再填充共享条目

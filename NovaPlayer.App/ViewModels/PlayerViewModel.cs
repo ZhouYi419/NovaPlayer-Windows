@@ -49,6 +49,7 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _informationTab;
     [ObservableProperty] private VideoItem? _currentVideo;
     public PreferencesService Preferences { get; }
+    public ShortcutService Shortcuts { get; }
     public ObservableCollection<VideoItem> Playlist { get; } = [];
     public ObservableCollection<VideoItem> History { get; } = [];
     public ObservableCollection<VideoItem> FilteredHistory { get; } = [];
@@ -61,6 +62,7 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     public event EventHandler? FullscreenRequested;
     public event EventHandler? MiniPlayerRequested;
     public event EventHandler? SubtitleRequested;
+    public event EventHandler? ShortcutSettingsRequested;
     public event EventHandler<VideoItem>? LocateRequested;
     public Func<string, bool>? Confirm { get; set; }
     public string FileName => State.FilePath is null ? "Nova Player" : Path.GetFileName(State.FilePath);
@@ -72,8 +74,8 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     public string PlayIcon => State.IsPaused || State.IsEnded ? "play" : "pause";
     public string VolumeIcon => State.EffectiveMuted ? "mute" : "volume";
     public string PlayText => State.IsPaused || State.IsEnded ? "继续播放" : "暂停播放";
-    public string Status => State.Error ?? PersistenceWarning ?? (IsImporting ? "正在添加本地视频…" : State.IsLoading ? "正在加载视频…" : State.IsSeeking ? "正在跳转…" :
-        State.Speed > 3 && State.Warning is not null ? State.Warning : State.Speed > 8 ? "高倍速已自动静音，降速后恢复原音频状态" : Notice);
+    public string Status => State.Error ?? State.OperationWarning ?? PersistenceWarning ?? (IsImporting ? "正在添加本地视频…" : State.IsLoading ? "正在加载视频…" : State.IsSeeking ? "正在跳转…" :
+        State.Speed > 3 && State.Warning is not null ? State.Warning : State.Speed > 8 && Preferences.AutoMuteHighSpeed ? "高倍速已自动静音，降速后恢复原音频状态" : Notice);
     public bool ShowEmpty => !State.IsLoaded && !State.IsLoading;
     public double SeekMaximum => Math.Max(1, State.Duration);
     public bool IsHome => CurrentPage == "首页";
@@ -87,14 +89,16 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
         ?? History.Where(v => v.HistoryVisible).OrderByDescending(v => v.LastPlayed).FirstOrDefault();
     public string ProgressText => CurrentVideo?.ProgressText ?? "0%";
 
-    public PlayerViewModel(IPlayerEngine engine, Dispatcher dispatcher, PreferencesService preferences, IPlaybackStore store, ThumbnailService thumbnails)
+    public PlayerViewModel(IPlayerEngine engine, Dispatcher dispatcher, PreferencesService preferences, IPlaybackStore store, ThumbnailService thumbnails, ShortcutService shortcuts)
     {
         _engine = engine; _dispatcher = dispatcher; _state = engine.State; Preferences = preferences;
+        Shortcuts = shortcuts;
         _store = store; _thumbnails = thumbnails;
         _saveTimer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, SaveTimerTick, dispatcher);
         _engine.StateChanged += EngineStateChanged;
         Preferences.SaveFailed += SettingsSaveFailed;
         Preferences.PropertyChanged += PreferenceChanged;
+        ApplyPlaybackPreferences();
         foreach (var choice in SpeedChoices) choice.IsSelected = choice.Value == State.Speed;
     }
     private void SettingsSaveFailed(object? sender, string message)
@@ -109,6 +113,7 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     }
     partial void OnStateChanged(PlayerState value)
     {
+        RefreshMediaInformation();
         foreach (var choice in SpeedChoices) choice.IsSelected = choice.Value == value.Speed;
         ObservePlayback(value);
         foreach (string name in new[] { nameof(FileName), nameof(VideoInfo), nameof(Resolution), nameof(FrameRate), nameof(TimeText),
@@ -235,7 +240,7 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     [RelayCommand] private void ToggleInformation() => Preferences.InformationExpanded = !Preferences.InformationExpanded;
     [RelayCommand] private void SetTheme(string theme) { if (Themes.Contains(theme)) Preferences.Theme = theme; }
     [RelayCommand] private void ShowInformation() { CurrentPage = "首页"; Preferences.InformationExpanded = true; InformationTab = 1; }
-    [RelayCommand] private void ShowShortcuts() => CurrentPage = "设置";
+    [RelayCommand] private void ShowShortcuts() { CurrentPage = "设置"; ShortcutSettingsRequested?.Invoke(this, EventArgs.Empty); }
     [RelayCommand] private void RequestRelocate(VideoItem? item) { if (item is not null) LocateRequested?.Invoke(this, item); }
     [RelayCommand] private void OpenDatabaseFolder() => Execute(() => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{Path.GetDirectoryName(DatabasePath)}\"") { UseShellExecute = true }));
     [RelayCommand]
@@ -271,8 +276,8 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
         if (State.IsEnded && CurrentVideo is not null) _ = PlayItemAsync(CurrentVideo, true);
         else _engine.SetPaused(!State.IsPaused);
     });
-    [RelayCommand] private void Backward() => SeekTo(State.Position - 10);
-    [RelayCommand] private void Forward() => SeekTo(State.Position + 10);
+    [RelayCommand] private void Backward() => SeekTo(State.Position - Preferences.SeekInterval);
+    [RelayCommand] private void Forward() => SeekTo(State.Position + Preferences.SeekInterval);
     [RelayCommand] private void ToggleMute() => Execute(() => _engine.SetMuted(!State.UserMuted));
     [RelayCommand] private void ResetSpeed() => ChangeSpeed(1);
     private void Execute(Action action)
