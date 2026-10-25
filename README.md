@@ -1,10 +1,10 @@
 # Nova Player
 
-Windows x64 本地视频播放器。当前完成 PRD 第一至第四阶段：内核、主界面、核心功能闭环及高级播放体验。
+Windows x64 本地视频播放器。已实现内核、主界面、核心功能闭环及高级播放体验；第五阶段提供 `1.0.0-rc.1` 内部验收候选包与发布工具。通用兼容目标为 Windows 10 22H2 x64 和 Windows 11 x64；Windows 10 真实目标机与原生依赖对应源码/发行许可条件尚未完成，不标为正式发行通过。
 
 ## 运行
 
-本次已生成便携版本：`artifacts/player/NovaPlayer.App.exe`。双击运行即可，无需全局安装 .NET 10；必须保留整个 `artifacts/player` 目录。
+第五阶段程序为 `artifacts/release/1.0.0-rc.1/player/NovaPlayer.exe`。双击运行即可，无需全局安装 .NET 10；必须保留整个 `player` 目录。同目录上一级提供 Windows 安装包、便携 ZIP、项目源码 ZIP、逐文件清单与 SHA256。构建命令及发行条件见 [第五阶段发布交付](docs/stage5-release.md)。
 
 使用“打开视频”、`Ctrl+O`、拖入文件或命令行文件参数导入本地视频。支持多选文件、拖入文件夹及 `Ctrl+Shift+O` 选择文件夹。文件夹递归导入、过滤非视频、去重，单次最多添加 10000 个视频。
 
@@ -46,6 +46,8 @@ SQLite 保存每个视频的进度、独立倍速、观看时间、完成状态�
 ./scripts/Verify-Stage2.ps1
 ./scripts/Verify-Stage3.ps1
 ./scripts/Verify-Stage4.ps1
+./scripts/Build-Release.ps1
+./scripts/Test-ReleaseManifest.ps1
 ```
 
 首次准备依赖和 NuGet 还原需要网络。程序播放本地视频时不需要网络。SDK 安装于 `.tools/dotnet`，不改变全局 SDK；构建脚本自动使用本地 SDK。
@@ -69,6 +71,8 @@ SQLite 保存每个视频的进度、独立倍速、观看时间、完成状态�
 
 第三阶段脚本连续启动三个独立进程，共享专用测试档案，验证真实跨进程保存与恢复；只操作样片副本，不使用日常播放档案。图形验收请顺序执行，避免多个窗口互相遮挡原生命中测试。
 
-第四阶段脚本生成双音轨、双内嵌字幕及外挂字幕样片，验证实际 GPU 字幕像素、快捷键分发、小窗 / 全屏转换，并启动第二个独立进程验证配置恢复。支持 `-PlayerPath artifacts/player/NovaPlayer.App.exe` 直接验收便携版。
+第四阶段脚本生成双音轨、双内嵌字幕及外挂字幕样片，验证实际 GPU 字幕像素、快捷键分发、小窗 / 全屏转换，并启动第二个独立进程验证配置恢复。支持 `-PlayerPath artifacts/player/NovaPlayer.exe` 直接验收便携版。
 
-详细结果见 [第四阶段验收记录](docs/stage4-verification.md)、[第四阶段逐环节代码说明](docs/stage4-code-walkthrough.md)、[第三阶段验收记录](docs/stage3-verification.md)、[第一阶段验收记录](docs/stage1-verification.md)、[第二阶段验收记录](docs/stage2-verification.md)，依赖来源见 [第三方依赖说明](THIRD_PARTY.md)。Windows 10、更多编码和显卡、安装包及分发许可审查仍属于第五阶段。
+第五阶段使用 Inno Setup 当前用户安装、七档应用图标、12 种视频“打开方式”候选注册；默认播放器由用户在 Windows 设置中选择。卸载保留历史、进度和设置。发布脚本导出实际依赖许可、构建配置与校验和，发现原生文件或许可类型变化时停止。已核查的原生构建启用 GPLv3；缺少完整对应源码与自有代码许可时，只输出明确标识的内部验收候选包。自有代码的发行许可需由权利人决定。
+
+详细结果见 [第五阶段发布交付](docs/stage5-release.md)、[第五阶段验收记录](docs/stage5-verification.md)、[第五阶段逐环节代码说明](docs/stage5-code-walkthrough.md)、[第四阶段验收记录](docs/stage4-verification.md)、[第四阶段逐环节代码说明](docs/stage4-code-walkthrough.md)、[第三阶段验收记录](docs/stage3-verification.md)、[第一阶段验收记录](docs/stage1-verification.md)、[第二阶段验收记录](docs/stage2-verification.md)，依赖来源见 [第三方依赖说明](THIRD_PARTY.md)。

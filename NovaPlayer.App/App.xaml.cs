@@ -21,9 +21,10 @@ public partial class App : Application
             var engine = await Task.Run(() => new MpvPlayerEngine(Log.Logger));
             try
             {
-                bool verify = e.Args.Length >= 3 && e.Args[0].StartsWith("--verify", StringComparison.Ordinal);
+                bool verifyFileOpen = e.Args.Length == 3 && e.Args[1] == "--verify-file-open";
+                bool verify = e.Args.Length >= 3 && e.Args[0].StartsWith("--verify", StringComparison.Ordinal) || verifyFileOpen;
                 if (verify) ShutdownMode = ShutdownMode.OnExplicitShutdown;
-                string profileName = verify && e.Args[0].StartsWith("--verify-library-", StringComparison.Ordinal)
+                string profileName = verifyFileOpen ? "launch-profile" : verify && e.Args[0].StartsWith("--verify-library-", StringComparison.Ordinal)
                     ? "profile" : verify && e.Args[0].StartsWith("--verify-experience", StringComparison.Ordinal) ? "experience-profile"
                     : verify ? Path.GetFileNameWithoutExtension(e.Args[2]) + "-profile" : "";
                 string root = verify ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(e.Args[2]))!, profileName)

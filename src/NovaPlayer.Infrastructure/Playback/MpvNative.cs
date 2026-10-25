@@ -61,6 +61,9 @@ internal static unsafe class MpvNative
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern void mpv_render_context_report_swap(nint context);
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern void mpv_render_context_free(nint context);
 
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern nint mpv_get_property_string(nint handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern void mpv_free(nint data);
+
     internal static void Check(int result)
     {
         if (result < 0) throw new InvalidOperationException($"libmpv: {Marshal.PtrToStringUTF8(mpv_error_string(result))} ({result})");

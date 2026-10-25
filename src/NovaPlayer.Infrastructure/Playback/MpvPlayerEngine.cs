@@ -24,6 +24,23 @@ public sealed class MpvPlayerEngine : IPlayerEngine
 
     public PlayerState State => Volatile.Read(ref _state);
     public event EventHandler<PlayerState>? StateChanged;
+    /// <summary>后台读取固定白名单中的构建与性能诊断；复制后立即释放 mpv 分配的字符串。</summary>
+    public IReadOnlyDictionary<string, string?> ReadDiagnostics()
+    {
+        string[] names = ["mpv-version", "mpv-configuration", "ffmpeg-version", "libass-version", "frame-drop-count", "decoder-frame-drop-count", "estimated-vf-fps"];
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_stopping, this);
+            var result = new Dictionary<string, string?>();
+            foreach (string name in names)
+            {
+                nint pointer = MpvNative.mpv_get_property_string(_handle, name);
+                try { result[name] = pointer == 0 ? null : Marshal.PtrToStringUTF8(pointer); }
+                finally { if (pointer != 0) MpvNative.mpv_free(pointer); }
+            }
+            return result;
+        }
+    }
     internal nint NativeHandle => _handle;
 
     public MpvPlayerEngine(ILogger log)
@@ -167,8 +184,15 @@ public sealed class MpvPlayerEngine : IPlayerEngine
         }
         finally { Marshal.FreeCoTaskMem(value); }
     }
-    public void Seek(double seconds) => Command("seek",
-        PlaybackPolicy.ClampPosition(seconds, State.Duration).ToString("R", CultureInfo.InvariantCulture), "absolute+exact");
+    public void Seek(double seconds)
+    {
+        var state = State;
+        double target = PlaybackPolicy.ClampPosition(seconds, state.Duration);
+        string extension = Path.GetExtension(state.FilePath)?.ToLowerInvariant() ?? "";
+        // 传输流/节目流缺少可靠索引时，解复用器可能落到目标之后的关键帧；提前读取再精确解码到目标。
+        SetDouble("hr-seek-demuxer-offset", extension is ".ts" or ".m2ts" or ".mpg" or ".mpeg" ? 10 : 0);
+        Command("seek", target.ToString("R", CultureInfo.InvariantCulture), "absolute+exact");
+    }
 
     public void SetSpeed(double speed)
     {

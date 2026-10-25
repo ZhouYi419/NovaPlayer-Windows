@@ -7,9 +7,18 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <UseWPF>true</UseWPF>
         <PlatformTarget>x64</PlatformTarget>
+        <AssemblyName>NovaPlayer</AssemblyName>
+        <RootNamespace>NovaPlayer.App</RootNamespace>
+        <Version>1.0.0-rc.1</Version>
+        <AssemblyVersion>1.0.0.0</AssemblyVersion>
+        <FileVersion>1.0.0.0</FileVersion>
+        <Product>Nova Player</Product>
+        <Description>Nova Player 本地视频播放器</Description>
+        <ApplicationIcon>Assets/NovaPlayer.ico</ApplicationIcon>
         <ApplicationManifest>app.manifest</ApplicationManifest>
     </PropertyGroup>
     <ItemGroup>
+        <Resource Include="Assets/NovaPlayer.ico" />
         <ProjectReference Include="../src/NovaPlayer.Core/NovaPlayer.Core.csproj" />
         <ProjectReference Include="../src/NovaPlayer.Infrastructure/NovaPlayer.Infrastructure.csproj" />
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />

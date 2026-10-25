@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$VideoPath, [ValidateRange(1, 10)][int]$Runs = 3)
+param([string]$VideoPath, [ValidateRange(1, 10)][int]$Runs = 3, [string]$PlayerPath)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/Use-DevelopmentEnvironment.ps1"
 $artifacts = Join-Path $taskRoot 'artifacts'
@@ -14,7 +14,7 @@ if (!$VideoPath) {
     }
 }
 $VideoPath = (Resolve-Path -LiteralPath $VideoPath).Path
-$exe = Join-Path $taskRoot 'NovaPlayer.App/bin/Release/net10.0-windows/NovaPlayer.App.exe'
+$exe = if ($PlayerPath) { (Resolve-Path -LiteralPath $PlayerPath).Path } else { Join-Path $taskRoot 'NovaPlayer.App/bin/Release/net10.0-windows/NovaPlayer.exe' }
 if (!(Test-Path -LiteralPath $exe)) { throw 'Run Build.ps1 first.' }
 $summary = @()
 for ($run = 1; $run -le $Runs; $run++) {

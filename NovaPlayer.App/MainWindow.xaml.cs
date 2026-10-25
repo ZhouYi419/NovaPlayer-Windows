@@ -44,6 +44,7 @@ public partial class MainWindow : Window
     {
         _engine = engine; _args = args;
         InitializeComponent();
+        Icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/Assets/NovaPlayer.ico"));
         _theme = new ThemeService(preferences);
         _viewModel = new PlayerViewModel(engine, Dispatcher, preferences, store, thumbnails, shortcuts); DataContext = _viewModel;
         _viewModel.OpenRequested += (_, _) => OpenFiles();
@@ -80,7 +81,9 @@ public partial class MainWindow : Window
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             if (_args.Length >= 3 && _args[0].StartsWith("--verify", StringComparison.Ordinal))
             {
-                int exit = _args[0].StartsWith("--verify-experience", StringComparison.Ordinal)
+                int exit = _args[0] == "--verify-release"
+                    ? await StageFiveVerification.RunAsync(this, _engine, renderer, _overlay!, _args[1], _args[2])
+                    : _args[0].StartsWith("--verify-experience", StringComparison.Ordinal)
                     ? await StageFourVerification.RunAsync(this, _engine, renderer, _overlay!, _args[0], _args[1], _args[2])
                     : _args[0].StartsWith("--verify-library-", StringComparison.Ordinal)
                     ? await StageThreeVerification.RunAsync(this, _engine, renderer, _overlay!, _args[0], _args[1], _args[2])
@@ -90,13 +93,21 @@ public partial class MainWindow : Window
                 if (_viewModel.IsMiniPlayer) ToggleMiniPlayer();
                 await CloseSessionAsync(); Application.Current.Shutdown(exit);
             }
-            else if (_args.Length > 0) await _viewModel.ImportFilesAsync(_args.Where(File.Exists));
+            else if (_args.Length > 0)
+            {
+                await _viewModel.ImportFilesAsync(_args.Where(File.Exists));
+                if (_args.Length == 3 && _args[1] == "--verify-file-open")
+                {
+                    int exit = await StageFiveVerification.RunFileOpenAsync(this, _engine, renderer, _args[0], _args[2]);
+                    await CloseSessionAsync(); Application.Current.Shutdown(exit);
+                }
+            }
         }
         catch (Exception ex)
         {
             Log.Error(ex, "播放器初始化或验收失败");
             _viewModel.Notice = $"播放器初始化失败：{ex.Message}"; _viewModel.IsReady = false;
-            if (_args.FirstOrDefault()?.StartsWith("--verify", StringComparison.Ordinal) == true) { await CloseSessionAsync(); Application.Current.Shutdown(1); }
+            if (_args.FirstOrDefault()?.StartsWith("--verify", StringComparison.Ordinal) == true || _args.Contains("--verify-file-open")) { await CloseSessionAsync(); Application.Current.Shutdown(1); }
         }
     }
     private async void OpenFiles()

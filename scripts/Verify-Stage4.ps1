@@ -43,7 +43,7 @@ Dialogue: Marked=0,0:00:00.00,0:01:25.00,Default,,0,0,0,,Nova Player SSA subtitl
 '@
 [System.IO.File]::WriteAllText((Join-Path $fixtures '外挂字幕.ssa'), $ssa)
 Copy-Item -LiteralPath $VideoPath -Destination (Join-Path $fixtures '无字幕.mp4')
-$exe = if ($PlayerPath) { (Resolve-Path -LiteralPath $PlayerPath).Path } else { Join-Path $taskRoot 'NovaPlayer.App/bin/Release/net10.0-windows/NovaPlayer.App.exe' }
+$exe = if ($PlayerPath) { (Resolve-Path -LiteralPath $PlayerPath).Path } else { Join-Path $taskRoot 'NovaPlayer.App/bin/Release/net10.0-windows/NovaPlayer.exe' }
 foreach ($phase in @('experience', 'experience-reopen')) {
     $report = Join-Path $runFolder "$phase.json"
     $process = Start-Process -FilePath $exe -ArgumentList "--verify-$phase", ('"' + $file + '"'), ('"' + $report + '"') -WindowStyle Hidden -PassThru

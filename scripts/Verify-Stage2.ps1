@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$VideoPath)
+param([string]$VideoPath, [string]$PlayerPath)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/Use-DevelopmentEnvironment.ps1"
 $artifacts = Join-Path $taskRoot 'artifacts'
@@ -8,7 +8,7 @@ $VideoPath = (Resolve-Path -LiteralPath $VideoPath).Path
 $runFolder = Join-Path $artifacts "stage2-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Force $runFolder | Out-Null
 $report = Join-Path $runFolder 'report.json'
-$exe = Join-Path $taskRoot 'NovaPlayer.App/bin/Release/net10.0-windows/NovaPlayer.App.exe'
+$exe = if ($PlayerPath) { (Resolve-Path -LiteralPath $PlayerPath).Path } else { Join-Path $taskRoot 'NovaPlayer.App/bin/Release/net10.0-windows/NovaPlayer.exe' }
 $process = Start-Process -FilePath $exe -ArgumentList '--verify-shell', ('"' + $VideoPath + '"'), ('"' + $report + '"') -WindowStyle Hidden -PassThru
 if (!$process.WaitForExit(60000)) { $process.Kill(); throw '主界面验收超时，请查看日志。' }
 $process.WaitForExit()

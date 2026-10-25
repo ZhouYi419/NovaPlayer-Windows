@@ -11,7 +11,7 @@ foreach ($name in @('a 中文视频.mp4', 'b 第二段.mp4', 'c 缺失视频.mp4
     Copy-Item -LiteralPath $VideoPath -Destination (Join-Path $fixtures $name)
 }
 $file = Join-Path $fixtures 'a 中文视频.mp4'
-$exe = if ($PlayerPath) { (Resolve-Path -LiteralPath $PlayerPath).Path } else { Join-Path $taskRoot 'NovaPlayer.App/bin/Release/net10.0-windows/NovaPlayer.App.exe' }
+$exe = if ($PlayerPath) { (Resolve-Path -LiteralPath $PlayerPath).Path } else { Join-Path $taskRoot 'NovaPlayer.App/bin/Release/net10.0-windows/NovaPlayer.exe' }
 $total = 0
 foreach ($phase in @('seed', 'resume', 'flow')) {
     $report = Join-Path $runFolder "$phase.json"
