@@ -20,6 +20,7 @@ public sealed class MpvGlRenderer : IDisposable
     private long _frames;
     private int _distinctSamples;
     private string? _sample;
+    private TaskCompletionSource<RenderedFrame>? _capture;
     public TaskCompletionSource Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public event EventHandler<string>? Failed;
     public long Frames => Interlocked.Read(ref _frames);
@@ -55,8 +56,15 @@ public sealed class MpvGlRenderer : IDisposable
         nint gl = 0, render = 0;
         try
         {
-            var pfd = new GlNative.PixelFormat { Size = (ushort)Marshal.SizeOf<GlNative.PixelFormat>(),
-                Version = 1, Flags = 0x4 | 0x20 | 0x1, ColorBits = 32, AlphaBits = 8, DepthBits = 0 };
+            var pfd = new GlNative.PixelFormat
+            {
+                Size = (ushort)Marshal.SizeOf<GlNative.PixelFormat>(),
+                Version = 1,
+                Flags = 0x4 | 0x20 | 0x1,
+                ColorBits = 32,
+                AlphaBits = 8,
+                DepthBits = 0
+            };
             int format = GlNative.ChoosePixelFormat(_dc, ref pfd);
             if (format == 0 || !GlNative.SetPixelFormat(_dc, format, ref pfd)) throw new Win32Exception();
             gl = GlNative.wglCreateContext(_dc);
@@ -90,6 +98,11 @@ public sealed class MpvGlRenderer : IDisposable
                 MpvNative.Check(MpvNative.mpv_render_context_render(render, args));
                 // 仅在显式验收模式中采样像素，正常播放不会从 GPU 回读画面。
                 if (CaptureVerificationSamples && _engine.State.IsLoaded) SampleFrame(fbo.Width, fbo.Height);
+                if (Interlocked.Exchange(ref _capture, null) is { } capture)
+                {
+                    try { capture.TrySetResult(ReadFrame(fbo.Width, fbo.Height)); }
+                    catch (Exception ex) { capture.TrySetException(ex); }
+                }
                 if (!GlNative.SwapBuffers(_dc)) throw new Win32Exception();
                 MpvNative.mpv_render_context_report_swap(render);
                 Interlocked.Increment(ref _frames);
@@ -103,6 +116,7 @@ public sealed class MpvGlRenderer : IDisposable
         }
         finally
         {
+            Interlocked.Exchange(ref _capture, null)?.TrySetException(new InvalidOperationException("渲染已停止，无法导出画面。"));
             if (render != 0)
             {
                 MpvNative.mpv_render_context_set_update_callback(render, null, 0);
@@ -114,6 +128,25 @@ public sealed class MpvGlRenderer : IDisposable
     }
 
     public bool CaptureVerificationSamples { get; set; }
+
+    public Task<RenderedFrame> CaptureFrameAsync()
+    {
+        ObjectDisposedException.ThrowIf(_stopping, this);
+        var request = new TaskCompletionSource<RenderedFrame>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (Interlocked.CompareExchange(ref _capture, request, null) is not null) throw new InvalidOperationException("已有画面导出任务正在进行。");
+        Interlocked.Exchange(ref _resize, 1); _wake.Set();
+        return request.Task.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+    private static unsafe RenderedFrame ReadFrame(int width, int height)
+    {
+        var pixels = new byte[checked(width * height * 4)];
+        GlNative.glReadBuffer(0x0405);
+        fixed (byte* pointer = pixels) GlNative.glReadPixels(0, 0, width, height, 0x80E1, 0x1401, (nint)pointer);
+        var topDown = new byte[pixels.Length];
+        int stride = width * 4;
+        for (int row = 0; row < height; row++) Buffer.BlockCopy(pixels, row * stride, topDown, (height - row - 1) * stride, stride);
+        return new RenderedFrame(width, height, topDown);
+    }
 
     private unsafe void SampleFrame(int width, int height)
     {
@@ -134,3 +167,5 @@ public sealed class MpvGlRenderer : IDisposable
         GC.KeepAlive(_getProc); GC.KeepAlive(_update);
     }
 }
+
+public sealed record RenderedFrame(int Width, int Height, byte[] Pixels);

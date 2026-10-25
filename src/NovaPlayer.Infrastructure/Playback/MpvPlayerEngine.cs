@@ -35,12 +35,14 @@ public sealed class MpvPlayerEngine : IPlayerEngine
             Option("hwdec", "d3d11va,d3d11va-copy,no");
             Option("audio-pitch-correction", "yes"); Option("framedrop", "vo");
             MpvNative.Check(MpvNative.mpv_initialize(_handle));
-            string[] doubles = ["time-pos", "duration", "speed", "volume"];
-            string[] flags = ["pause", "mute", "seeking", "eof-reached"];
+            string[] doubles = ["time-pos", "duration", "speed", "volume", "container-fps"];
+            string[] flags = ["pause", "mute", "seeking", "eof-reached", "sub-visibility"];
             foreach (var name in doubles) Observe(name, MpvNative.Double);
             foreach (var name in flags) Observe(name, MpvNative.Flag);
             Observe("width", MpvNative.Int64); Observe("height", MpvNative.Int64);
             Observe("hwdec-current", MpvNative.String);
+            Observe("video-format", MpvNative.String);
+            Observe("audio-codec-name", MpvNative.String);
             MpvNative.Check(MpvNative.mpv_request_log_messages(_handle, "warn"));
             _eventTask = Task.Run(EventLoop);
             _log.Information("libmpv initialized: PID {Pid}", Environment.ProcessId);
@@ -60,13 +62,29 @@ public sealed class MpvPlayerEngine : IPlayerEngine
     {
         var path = Path.GetFullPath(localFile);
         if (!File.Exists(path)) throw new FileNotFoundException("视频文件不存在，请重新选择文件。", path);
-        Update(s => new PlayerState { FilePath = path, IsLoading = true, Speed = s.Speed,
-            Volume = s.Volume, UserMuted = s.UserMuted, EffectiveMuted = s.EffectiveMuted });
+        Update(s => new PlayerState
+        {
+            FilePath = path,
+            IsLoading = true,
+            Speed = s.Speed,
+            Volume = s.Volume,
+            UserMuted = s.UserMuted,
+            EffectiveMuted = s.EffectiveMuted
+        });
         Command("loadfile", path, "replace");
         SetPaused(false);
     }
 
     public void SetPaused(bool paused) => SetFlag("pause", paused);
+    public void Stop() { Command("stop"); Update(s => new PlayerState { Volume = s.Volume, Speed = s.Speed, UserMuted = s.UserMuted, EffectiveMuted = s.EffectiveMuted }); }
+    public void SetSubtitlesVisible(bool visible) => SetFlag("sub-visibility", visible);
+    public void LoadSubtitle(string localFile)
+    {
+        var path = Path.GetFullPath(localFile);
+        if (!File.Exists(path)) throw new FileNotFoundException("字幕文件不存在。", path);
+        Command("sub-add", path, "select");
+        SetSubtitlesVisible(true);
+    }
     public void Seek(double seconds) => Command("seek",
         PlaybackPolicy.ClampPosition(seconds, State.Duration).ToString("R", CultureInfo.InvariantCulture), "absolute+exact");
 
@@ -164,8 +182,12 @@ public sealed class MpvPlayerEngine : IPlayerEngine
                     case 7:
                         var end = Marshal.PtrToStructure<MpvNative.EndFile>(ev.Data);
                         if (end.Reason == 4)
-                            Update(s => s with { IsLoaded = false, IsLoading = false,
-                                Error = $"无法播放：{Marshal.PtrToStringUTF8(MpvNative.mpv_error_string(end.Error))}" });
+                            Update(s => s with
+                            {
+                                IsLoaded = false,
+                                IsLoading = false,
+                                Error = $"无法播放：{Marshal.PtrToStringUTF8(MpvNative.mpv_error_string(end.Error))}"
+                            });
                         else Update(s => s with { IsLoading = false });
                         break;
                     case 8: Update(s => s with { IsLoading = false, IsLoaded = true, Error = null }); break;
@@ -193,13 +215,17 @@ public sealed class MpvPlayerEngine : IPlayerEngine
             "duration" => s with { Duration = Math.Max(0, number) },
             "speed" => s with { Speed = number },
             "volume" => s with { Volume = number },
+            "container-fps" => s with { FramesPerSecond = number },
             "pause" => s with { IsPaused = flag },
             "mute" => s with { EffectiveMuted = flag },
+            "sub-visibility" => s with { SubtitlesVisible = flag },
             "seeking" => s with { IsSeeking = flag },
             "eof-reached" => s with { IsEnded = flag },
             "width" => s with { Width = (int)Marshal.ReadInt64(p.Data) },
             "height" => s with { Height = (int)Marshal.ReadInt64(p.Data) },
             "hwdec-current" => s with { Decoder = Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(p.Data)) is { Length: > 0 } decoder ? decoder : "软件解码" },
+            "video-format" => s with { VideoCodec = Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(p.Data)) ?? "未知" },
+            "audio-codec-name" => s with { AudioCodec = Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(p.Data)) ?? "未知" },
             _ => s
         });
     }

@@ -12,4 +12,7 @@ public interface IPlayerEngine : IDisposable
     void SetSpeed(double speed);
     void SetVolume(double volume);
     void SetMuted(bool muted);
+    void Stop();
+    void LoadSubtitle(string localFile);
+    void SetSubtitlesVisible(bool visible);
 }

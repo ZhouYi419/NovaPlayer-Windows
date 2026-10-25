@@ -1,12 +1,14 @@
 # Nova Player
 
-Windows x64 本地视频播放器。当前完成 PRD 第一阶段：播放内核与渲染可行性验证。
+Windows x64 本地视频播放器。当前完成 PRD 第一阶段内核验证及第二阶段主界面实现。
 
 ## 运行
 
 本次已生成便携版本：`artifacts/player/NovaPlayer.App.exe`。双击运行即可，无需全局安装 .NET 10；必须保留整个 `artifacts/player` 目录。
 
-使用“打开视频”、`Ctrl+O`、拖入单个文件或命令行文件参数打开本地视频。视频名称、分辨率、时长与进度来自真实文件和 libmpv。
+使用“打开视频”、`Ctrl+O`、拖入文件或命令行文件参数导入本地视频。支持多选文件、拖入文件夹及 `Ctrl+Shift+O` 选择文件夹。文件夹递归导入、过滤非视频、去重，单次最多添加 10000 个视频。
+
+首页包含顶部搜索、左侧导航、视频与控制层、右侧播放列表、底部信息标签及快捷设置。队列支持切换、拖动排序、上下移动与移除；搜索范围仅限已添加的队列和当前会话历史。导航至历史或设置时保持当前播放会话。
 
 | 操作 | 快捷键 |
 | --- | --- |
@@ -28,6 +30,7 @@ Windows x64 本地视频播放器。当前完成 PRD 第一阶段：播放内核
 ./scripts/Setup-Dependencies.ps1 -IncludeVerificationTools
 ./scripts/Build.ps1 -Publish
 ./scripts/Verify-Stage1.ps1 -Runs 3
+./scripts/Verify-Stage2.ps1
 ```
 
 首次准备依赖和 NuGet 还原需要网络。程序播放本地视频时不需要网络。SDK 安装于 `.tools/dotnet`，不改变全局 SDK；构建脚本自动使用本地 SDK。
@@ -43,8 +46,10 @@ Windows x64 本地视频播放器。当前完成 PRD 第一阶段：播放内核
 - `native/win-x64/`：本地 libmpv 运行库，通过脚本下载校验，忽略 Git 跟踪。
 - `docs/`：渲染方案、验收证据及当前范围。
 
-日志位于 `%LOCALAPPDATA%\NovaPlayer\logs`，按天轮转，保留最近 14 份。没有实现播放历史持久化；当前退出不会记录续播位置。
+日志位于 `%LOCALAPPDATA%\NovaPlayer\logs`，按天轮转，保留最近 14 份。界面偏好存放在 `%LOCALAPPDATA%\NovaPlayer\settings\appearance.json`，快捷设置和设置页共用同一个配置实例，退出前刷新最后一次设置快照。
 
-当前界面是与原型配色一致的第一阶段播放器验证界面。完整导航、播放列表、历史、设置、字幕管理、画中画、数据库与安装程序属于后续阶段。
+播放记录、队列、独立倍速和续播位置目前仅保留在当前会话内；跨重启保存、SQLite 及缩略图缓存属于第三阶段。未读取媒体信息的队列条目显示“时长待读取”，封面采用统一视频图标，不使用虚构内容。
 
-详细结果见 [第一阶段验收记录](docs/stage1-verification.md)，原生依赖来源见 [第三方依赖说明](THIRD_PARTY.md)。
+主界面支持深色、浅色、跟随系统主题；小于 1200 像素时隐藏播放列表，小于 1050 像素时导航切换为图标模式，底部信息在窄窗口改为纵向排列。已接入基础画中画（同一主窗口缩为置顶小窗）、外挂字幕加载与字幕显示开关；完整字幕/音轨管理、可修改快捷键及高级播放设置仍待后续完善。
+
+详细结果见 [第一阶段验收记录](docs/stage1-verification.md)、[第二阶段验收记录](docs/stage2-verification.md)，原生依赖来源见 [第三方依赖说明](THIRD_PARTY.md)。

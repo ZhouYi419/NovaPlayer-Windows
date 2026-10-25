@@ -1,0 +1,61 @@
+<UserControl x:Class="NovaPlayer.App.Views.HistoryView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="clr-namespace:NovaPlayer.App.Controls">
+    <Grid Margin="24,20,24,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="64" />
+            <RowDefinition />
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="播放历史" FontSize="25" FontWeight="SemiBold" />
+            <TextBlock Text="本次会话的观看记录 · 关闭应用后不保留" Foreground="{DynamicResource TextMuted}" Margin="0,8,0,0" />
+        </StackPanel>
+        <DockPanel Grid.Row="1" Margin="0,16,0,12">
+            <Button DockPanel.Dock="Right" Content="清空历史" Command="{Binding ClearHistoryCommand}" />
+            <TextBox Text="{Binding HistorySearch, UpdateSourceTrigger=PropertyChanged}" Width="320" HorizontalAlignment="Left" ToolTip="按视频名称搜索播放历史" />
+        </DockPanel>
+        <ListBox Grid.Row="2" ItemsSource="{Binding FilteredHistory}">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Border Background="{DynamicResource PanelBackground}" CornerRadius="10" Padding="16" Margin="0,0,0,10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="100" />
+                                <ColumnDefinition />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Background="{DynamicResource InputBrush}" Width="88" Height="58" CornerRadius="6">
+                                <c:Icon Kind="video" Width="28" Height="28" Foreground="{DynamicResource TextMuted}" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,20,0">
+                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="15" ToolTip="{Binding Path}" />
+                                <TextBlock Text="{Binding DurationText}" Foreground="{DynamicResource TextMuted}" Margin="0,6,0,6" />
+                                <ProgressBar Maximum="100" Value="{Binding Percentage, Mode=OneWay}" />
+                                <TextBlock Text="{Binding LastPlayedText}" Foreground="{DynamicResource TextMuted}" FontSize="11" Margin="0,5,0,0" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                <TextBlock Text="{Binding ProgressText}" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                                <Button Content="继续播放" Command="{Binding DataContext.PlayVideoCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}" Style="{StaticResource SurfaceButton}" />
+                                <Button Content="移除记录" Command="{Binding DataContext.DeleteHistoryCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}" Margin="8,0,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <StackPanel.Style>
+                <Style TargetType="StackPanel">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasHistory}" Value="False">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Style>
+            <c:Icon Kind="history" Width="42" Height="42" Foreground="{DynamicResource TextMuted}" />
+            <TextBlock Text="还没有匹配的播放记录" FontSize="20" Margin="0,20,0,8" />
+            <Button Content="打开视频" Command="{Binding OpenCommand}" Style="{StaticResource PrimaryButton}" Margin="0,16,0,0" />
+        </StackPanel>
+    </Grid>
+</UserControl>

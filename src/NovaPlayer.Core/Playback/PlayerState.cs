@@ -17,6 +17,10 @@ public sealed record PlayerState
     public int Width { get; init; }
     public int Height { get; init; }
     public string Decoder { get; init; } = "未加载";
+    public string VideoCodec { get; init; } = "未知";
+    public string AudioCodec { get; init; } = "未知";
+    public double FramesPerSecond { get; init; }
+    public bool SubtitlesVisible { get; init; } = true;
     public string? Error { get; init; }
     public string? Warning { get; init; }
 }

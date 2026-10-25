@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using NovaPlayer.Infrastructure.Playback;
+using NovaPlayer.App.Services;
 using Serilog;
 
 namespace NovaPlayer.App;
@@ -16,7 +17,14 @@ public partial class App : Application
         try
         {
             var engine = await Task.Run(() => new MpvPlayerEngine(Log.Logger));
-            try { MainWindow = new MainWindow(engine, e.Args); MainWindow.Show(); }
+            try
+            {
+                string preferencesPath = e.Args.FirstOrDefault()?.StartsWith("--verify", StringComparison.Ordinal) == true
+                    ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(e.Args[2]))!, $"preferences-{Guid.NewGuid():N}.json")
+                    : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NovaPlayer", "settings", "appearance.json");
+                var preferences = await PreferencesService.LoadAsync(preferencesPath);
+                MainWindow = new MainWindow(engine, e.Args, preferences); MainWindow.Show();
+            }
             catch { engine.Dispose(); throw; }
         }
         catch (Exception ex)

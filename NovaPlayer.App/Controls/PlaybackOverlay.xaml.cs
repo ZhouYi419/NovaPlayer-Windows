@@ -18,12 +18,14 @@ public partial class PlaybackOverlay : Window
     private readonly FrameworkElement _target;
     private readonly DispatcherTimer _timer;
     private DateTime _lastActivity = DateTime.UtcNow;
-    private bool _dragging, _ownerMinimized;
+    private bool _dragging;
+    private ContextMenu? _contextMenu;
     private Rect _lastBounds;
     public PlaybackOverlay(MainWindow main, PlayerViewModel viewModel, FrameworkElement target)
     {
         _main = main; _viewModel = viewModel; _target = target;
         InitializeComponent(); DataContext = viewModel;
+        SizeChanged += (_, _) => UpdatePresentation();
         _target.LayoutUpdated += Target_LayoutUpdated;
         _main.LocationChanged += Owner_Changed; _main.StateChanged += Owner_Changed;
         _timer = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background, HideIdleControls, Dispatcher);
@@ -38,9 +40,12 @@ public partial class PlaybackOverlay : Window
     private void Owner_Changed(object? sender, EventArgs e) => SyncBounds();
     public void SyncBounds()
     {
-        if (!IsLoaded || PresentationSource.FromVisual(_target) is null) return;
-        if (_main.WindowState == WindowState.Minimized) { _ownerMinimized = true; Hide(); return; }
-        if (_ownerMinimized) { _ownerMinimized = false; Show(); }
+        if (new WindowInteropHelper(this).Handle == 0) return;
+        if (!_main.ShouldShowPlayerOverlay || _main.WindowState == WindowState.Minimized)
+        { CloseMenu(); if (IsVisible) Hide(); return; }
+        if (PresentationSource.FromVisual(_target) is null || _target.ActualWidth < 1 || _target.ActualHeight < 1) return;
+        if (!IsVisible) Show();
+        UpdatePresentation();
         var origin = _target.PointToScreen(new Point());
         var end = _target.PointToScreen(new Point(_target.ActualWidth, _target.ActualHeight));
         var bounds = new Rect(origin, end);
@@ -57,13 +62,29 @@ public partial class PlaybackOverlay : Window
     }
     private void HideIdleControls(object? sender, EventArgs e)
     {
-        if (!_viewModel.IsFullscreen) { ShowControls(); return; }
-        if (!_viewModel.State.IsLoaded || SpeedPopup.IsOpen || _dragging || BottomChrome.IsMouseOver) return;
+        if (!_viewModel.IsFullscreen && !_viewModel.IsMiniPlayer) { ShowControls(); return; }
+        if (!_viewModel.State.IsLoaded || SpeedPopup.IsOpen || _contextMenu?.IsOpen == true || _dragging || BottomChrome.IsMouseOver) return;
         if (DateTime.UtcNow - _lastActivity < TimeSpan.FromSeconds(3)) return;
         TopChrome.Opacity = BottomChrome.Opacity = 0;
         BottomChrome.IsHitTestVisible = false; Cursor = Cursors.None;
     }
     private void Video_MouseMove(object sender, MouseEventArgs e) => ShowControls();
+    private void Video_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_viewModel.IsMiniPlayer && e.ClickCount == 1 && e.OriginalSource is DependencyObject element && !IsControl(element)) _main.DragMove();
+    }
+    private void UpdatePresentation()
+    {
+        bool mini = _viewModel.IsMiniPlayer;
+        TopTools.Visibility = NormalControls.Visibility = mini ? Visibility.Collapsed : Visibility.Visible;
+        MetadataLabel.Visibility = mini ? Visibility.Collapsed : Visibility.Visible;
+        PlayerStatus.Visibility = mini ? Visibility.Collapsed : Visibility.Visible;
+        VolumeSlider.Visibility = ActualWidth < 640 ? Visibility.Collapsed : Visibility.Visible;
+        double scale = ActualHeight < 330 ? 0.75 : 1;
+        // 只在缩放比例变化时更新变换，避免在布局通知中持续触发重新测量。
+        if (EmptyContent.LayoutTransform is not System.Windows.Media.ScaleTransform current || current.ScaleX != scale)
+            EmptyContent.LayoutTransform = new System.Windows.Media.ScaleTransform(scale, scale);
+    }
     private void Video_DoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is FrameworkElement element && IsControl(element)) return;
@@ -83,6 +104,10 @@ public partial class PlaybackOverlay : Window
         System.Windows.Data.BindingOperations.ClearBinding(SeekSlider, RangeBase.ValueProperty);
     }
     private void Seek_End(object sender, MouseButtonEventArgs e) => CommitSeek();
+    private void Seek_Hover(object sender, MouseEventArgs e)
+    {
+        if (SeekSlider.ActualWidth > 0) SeekSlider.ToolTip = PlayerViewModel.FormatTime(Math.Clamp(e.GetPosition(SeekSlider).X / SeekSlider.ActualWidth, 0, 1) * _viewModel.State.Duration);
+    }
     private void Seek_LostCapture(object sender, MouseEventArgs e) => CommitSeek();
     private void CommitSeek()
     {
@@ -113,7 +138,31 @@ public partial class PlaybackOverlay : Window
         else _viewModel.Notice = "请输入 0.25～15.0 之间的有效倍速。";
     }
     private void CloseSpeed_Click(object sender, RoutedEventArgs e) => SpeedPopup.IsOpen = false;
-    public bool CloseMenu() { bool wasOpen = SpeedPopup.IsOpen; SpeedPopup.IsOpen = false; return wasOpen; }
+    public bool CloseMenu()
+    {
+        bool wasOpen = SpeedPopup.IsOpen || _contextMenu?.IsOpen == true;
+        SpeedPopup.IsOpen = false;
+        if (_contextMenu is not null) _contextMenu.IsOpen = false;
+        return wasOpen;
+    }
+    private void More_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = MoreButton };
+        menu.Items.Add(new MenuItem { Header = "打开文件所在位置", Command = _viewModel.RevealCommand });
+        menu.Items.Add(new MenuItem { Header = "视频信息", Command = _viewModel.ShowInformationCommand });
+        menu.Items.Add(new MenuItem { Header = "从头播放", Command = _viewModel.RestartCommand });
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem { Header = "从播放列表移除", Command = _viewModel.RemoveVideoCommand, CommandParameter = _viewModel.CurrentVideo });
+        _contextMenu = menu; menu.IsOpen = true;
+    }
+    private void Subtitle_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = SubtitleButton };
+        menu.Items.Add(new MenuItem { Header = "显示字幕", IsCheckable = true, IsChecked = _viewModel.State.SubtitlesVisible, Command = _viewModel.ToggleSubtitlesCommand });
+        menu.Items.Add(new MenuItem { Header = "加载外挂字幕…", Command = _viewModel.LoadSubtitleCommand });
+        _contextMenu = menu; menu.IsOpen = true;
+    }
+    private void CloseMini_Click(object sender, RoutedEventArgs e) => _main.ToggleMiniPlayer();
     internal bool VerifyOverlayHitTest()
     {
         var point = SpeedButton.PointToScreen(new Point(SpeedButton.ActualWidth / 2, SpeedButton.ActualHeight / 2));
@@ -122,8 +171,8 @@ public partial class PlaybackOverlay : Window
             WindowFromPoint(new NativePoint((int)point.X, (int)point.Y)) == hwnd;
     }
     [StructLayout(LayoutKind.Sequential)] private readonly record struct NativePoint(int X, int Y);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int w, int h, uint flags);
+    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int w, int h, uint flags);
     [DllImport("user32.dll")] private static extern nint WindowFromPoint(NativePoint point);
     [DllImport("user32.dll")] private static extern nint GetWindow(nint hwnd, uint command);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindowVisible(nint hwnd);
+    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindowVisible(nint hwnd);
 }
