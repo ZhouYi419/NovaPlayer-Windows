@@ -93,6 +93,10 @@
                 </LinearGradientBrush>
             </Grid.Background>
             <StackPanel VerticalAlignment="Bottom" Margin="20,0,20,16">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8" Visibility="{Binding HasResumePrompt, Converter={StaticResource BoolVisibility}}">
+                    <TextBlock Text="{Binding ResumePrompt}" Foreground="White" FontSize="12" VerticalAlignment="Center" />
+                    <Button Content="从头播放" Command="{Binding RestartCommand}" Foreground="#7DAAFF" Margin="8,0,0,0" Padding="8,3" />
+                </StackPanel>
                 <TextBlock x:Name="PlayerStatus" Text="{Binding Status}" Foreground="#91A1BB" FontSize="11" Margin="0,0,0,10" TextTrimming="CharacterEllipsis" />
                 <DockPanel>
                     <TextBlock Text="{Binding TimeText}" Width="152" VerticalAlignment="Center" Foreground="White" FontSize="12" />

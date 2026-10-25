@@ -80,8 +80,11 @@ internal static class StageOneVerification
             window.ToggleFullscreen(); await Task.Delay(300);
             Check("fullscreen restores window", !vm.IsFullscreen && overlay.VerifyOverlayHitTest());
             window.WindowState = WindowState.Minimized; await Task.Delay(200);
-            window.WindowState = WindowState.Normal; window.Activate(); await Task.Delay(300);
-            Check("minimize restore keeps overlay", overlay.VerifyOverlayHitTest());
+            window.WindowState = WindowState.Normal; window.Activate();
+            // 验收进程恢复时可能被其他应用挡住，短暂置顶只用于隔离原生命中测试的外部遮挡。
+            bool wasTopmost = window.Topmost; window.Topmost = true; await Task.Delay(300);
+            Check("minimize restore keeps overlay", overlay.VerifyOverlayHitTest(), overlay.HitTestDiagnostics());
+            window.Topmost = wasTopmost;
             // 比较预热后的等价窗口状态，避免将首次分配 GPU 资源产生的内存增长误判为泄漏。
             process.Refresh();
             long warmMemory = process.PrivateMemorySize64;
@@ -109,11 +112,26 @@ internal static class StageOneVerification
         {
             renderer.CaptureVerificationSamples = false;
             process.Refresh();
-            var report = new { passed, failure, file = Path.GetFullPath(file), gpu = renderer.Gpu,
-                decoder = engine.State.Decoder, renderedFrames = renderer.Frames, distinctPixelSamples = renderer.DistinctSamples,
-                measuredRate, checks, resources = new { initialMemory, finalMemory = process.PrivateMemorySize64,
-                    initialHandles, finalHandles = process.HandleCount },
-                note = "Resource values cover one live session; teardown/repeated-process checks are performed by Verify-Stage1.ps1." };
+            var report = new
+            {
+                passed,
+                failure,
+                file = Path.GetFullPath(file),
+                gpu = renderer.Gpu,
+                decoder = engine.State.Decoder,
+                renderedFrames = renderer.Frames,
+                distinctPixelSamples = renderer.DistinctSamples,
+                measuredRate,
+                checks,
+                resources = new
+                {
+                    initialMemory,
+                    finalMemory = process.PrivateMemorySize64,
+                    initialHandles,
+                    finalHandles = process.HandleCount
+                },
+                note = "Resource values cover one live session; teardown/repeated-process checks are performed by Verify-Stage1.ps1."
+            };
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(reportPath))!);
             await File.WriteAllTextAsync(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         }

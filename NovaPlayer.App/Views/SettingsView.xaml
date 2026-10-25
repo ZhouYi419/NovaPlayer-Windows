@@ -9,8 +9,20 @@
                         <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding Preferences.AutoResume}" />
                         <StackPanel>
                             <TextBlock Text="自动续播" />
-                            <TextBlock Text="再次打开时，恢复本次会话中有效的观看位置" Foreground="{DynamicResource TextMuted}" FontSize="12" Margin="0,6,12,0" TextWrapping="Wrap" />
+                            <TextBlock Text="再次打开时，恢复已保存的有效观看位置" Foreground="{DynamicResource TextMuted}" FontSize="12" Margin="0,6,12,0" TextWrapping="Wrap" />
                         </StackPanel>
+                    </DockPanel>
+                    <DockPanel Margin="0,0,0,18">
+                        <ComboBox DockPanel.Dock="Right" Width="160" ItemsSource="{Binding ResumeModes}" SelectedItem="{Binding Preferences.ResumeMode}" />
+                        <TextBlock Text="续播模式" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <DockPanel Margin="0,0,0,18">
+                        <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding Preferences.RememberSpeed}" />
+                        <TextBlock Text="记忆独立视频倍速" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <DockPanel Margin="0,0,0,18">
+                        <ComboBox DockPanel.Dock="Right" Width="160" ItemsSource="{Binding PlaybackModes}" SelectedIndex="{Binding PlaybackModeIndex}" />
+                        <TextBlock Text="播放结束后" VerticalAlignment="Center" />
                     </DockPanel>
                     <DockPanel>
                         <ComboBox DockPanel.Dock="Right" Width="100" ItemsSource="{Binding Speeds}" ItemTemplate="{StaticResource SpeedValueTemplate}" SelectedItem="{Binding Preferences.DefaultSpeed}" />
@@ -64,6 +76,17 @@
                         <TextBlock Text="Ctrl + ← / →    切换视频" />
                     </StackPanel>
                 </Grid>
+            </Border>
+            <TextBlock Text="数据管理" FontSize="17" FontWeight="SemiBold" Margin="0,26,0,12" />
+            <Border Background="{DynamicResource PanelBackground}" CornerRadius="10" Padding="20">
+                <StackPanel>
+                    <TextBlock Text="{Binding History.Count, StringFormat=播放记录：{0} 条}" Margin="0,0,0,12" />
+                    <TextBlock Text="{Binding DatabasePath}" TextWrapping="Wrap" Foreground="{DynamicResource TextMuted}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="打开数据库目录" Command="{Binding OpenDatabaseFolderCommand}" />
+                        <Button Content="清除播放历史" Command="{Binding ClearHistoryCommand}" Margin="12,0,0,0" />
+                    </StackPanel>
+                </StackPanel>
             </Border>
         </StackPanel>
     </ScrollViewer>

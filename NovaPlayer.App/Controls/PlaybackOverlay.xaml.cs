@@ -78,7 +78,7 @@ public partial class PlaybackOverlay : Window
         bool mini = _viewModel.IsMiniPlayer;
         TopTools.Visibility = NormalControls.Visibility = mini ? Visibility.Collapsed : Visibility.Visible;
         MetadataLabel.Visibility = mini ? Visibility.Collapsed : Visibility.Visible;
-        PlayerStatus.Visibility = mini ? Visibility.Collapsed : Visibility.Visible;
+        PlayerStatus.Visibility = mini || _viewModel.HasResumePrompt ? Visibility.Collapsed : Visibility.Visible;
         VolumeSlider.Visibility = ActualWidth < 640 ? Visibility.Collapsed : Visibility.Visible;
         double scale = ActualHeight < 330 ? 0.75 : 1;
         // 只在缩放比例变化时更新变换，避免在布局通知中持续触发重新测量。
@@ -169,6 +169,22 @@ public partial class PlaybackOverlay : Window
         var hwnd = new WindowInteropHelper(this).Handle;
         return IsWindowVisible(hwnd) && GetWindow(hwnd, 4) == new WindowInteropHelper(_main).Handle &&
             WindowFromPoint(new NativePoint((int)point.X, (int)point.Y)) == hwnd;
+    }
+    internal object HitTestDiagnostics()
+    {
+        var point = SpeedButton.PointToScreen(new Point(SpeedButton.ActualWidth / 2, SpeedButton.ActualHeight / 2));
+        var hwnd = new WindowInteropHelper(this).Handle;
+        return new
+        {
+            IsVisible,
+            nativeVisible = IsWindowVisible(hwnd),
+            hwnd = hwnd.ToInt64(),
+            owner = GetWindow(hwnd, 4).ToInt64(),
+            expectedOwner = new WindowInteropHelper(_main).Handle.ToInt64(),
+            hit = WindowFromPoint(new NativePoint((int)point.X, (int)point.Y)).ToInt64(),
+            point,
+            state = _main.WindowState.ToString()
+        };
     }
     [StructLayout(LayoutKind.Sequential)] private readonly record struct NativePoint(int X, int Y);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int w, int h, uint flags);

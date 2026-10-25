@@ -2,6 +2,7 @@ namespace NovaPlayer.Core.Playback;
 
 public sealed record PlayerState
 {
+    public long SessionId { get; init; }
     public string? FilePath { get; init; }
     public double Position { get; init; }
     public double Duration { get; init; }

@@ -30,10 +30,10 @@ New-Item -ItemType Directory -Force $native | Out-Null
 Copy-Item -LiteralPath (Join-Path $tools 'mpv/libmpv-2.dll') -Destination (Join-Path $native 'libmpv-2.dll') -Force
 if ((Get-FileHash -LiteralPath (Join-Path $native 'libmpv-2.dll')).Hash -ne '04E4D27DC385DC18DDD93FBE69C75E635B864F3C6EC53A9122DF54C2F7842F4A') { throw 'libmpv DLL checksum mismatch' }
 
-if ($IncludeVerificationTools) {
-    $archive = Join-Path $tools 'ffmpeg.7z'
-    Get-VerifiedFile 'https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261021/ffmpeg-x86_64-git-9a861e968.7z' $archive 'fc9c135b799b410ffc78517f428904c299bc64cd8144f21f63f84fcd8c35ea19'
-    & $extractor x $archive "-o$(Join-Path $tools 'ffmpeg')" -y | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'FFmpeg extraction failed' }
-}
+# 保留旧参数以兼容已有命令；第三阶段起 FFmpeg 也是缩略图运行依赖，始终部署。
+$archive = Join-Path $tools 'ffmpeg.7z'
+Get-VerifiedFile 'https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261021/ffmpeg-x86_64-git-9a861e968.7z' $archive 'fc9c135b799b410ffc78517f428904c299bc64cd8144f21f63f84fcd8c35ea19'
+& $extractor x $archive "-o$(Join-Path $tools 'ffmpeg')" -y | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'FFmpeg extraction failed' }
+Copy-Item -LiteralPath (Join-Path $tools 'ffmpeg/ffmpeg.exe') -Destination (Join-Path $native 'ffmpeg.exe') -Force
 Write-Output 'Dependencies ready. SDK/runtime files are local to this workspace.'

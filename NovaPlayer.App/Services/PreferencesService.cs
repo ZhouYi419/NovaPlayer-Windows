@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Serilog;
+using NovaPlayer.Core.Playback;
 
 namespace NovaPlayer.App.Services;
 
@@ -16,6 +17,9 @@ public partial class PreferencesService : ObservableObject
     [ObservableProperty] private bool _informationExpanded = true;
     [ObservableProperty] private bool _alwaysOnTop;
     [ObservableProperty] private string _theme = "深色";
+    [ObservableProperty] private bool _rememberSpeed = true;
+    [ObservableProperty] private string _resumeMode = "自动续播";
+    [ObservableProperty] private PlaybackMode _mode = PlaybackMode.Sequential;
     public event EventHandler<string>? SaveFailed;
     internal string StoragePath => _path;
 
@@ -35,6 +39,9 @@ public partial class PreferencesService : ObservableObject
                 service.InformationExpanded = data.InformationExpanded;
                 service.AlwaysOnTop = data.AlwaysOnTop;
                 service.Theme = data.Theme is "浅色" or "跟随系统" ? data.Theme : "深色";
+                service.RememberSpeed = data.RememberSpeed;
+                service.ResumeMode = !data.AutoResume || data.ResumeMode == "始终从头播放" ? "始终从头播放" : data.ResumeMode == "询问后续播" ? data.ResumeMode : "自动续播";
+                service.Mode = Enum.IsDefined(data.Mode) ? data.Mode : PlaybackMode.Sequential;
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -49,7 +56,7 @@ public partial class PreferencesService : ObservableObject
     }
     public async Task SaveAsync()
     {
-        var data = new PreferenceData(AutoResume, DefaultSpeed, PlaylistExpanded, InformationExpanded, AlwaysOnTop, Theme);
+        var data = new PreferenceData(AutoResume, DefaultSpeed, PlaylistExpanded, InformationExpanded, AlwaysOnTop, Theme, RememberSpeed, ResumeMode, Mode);
         await _writeGate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -62,5 +69,9 @@ public partial class PreferencesService : ObservableObject
         { Log.Warning(ex, "保存界面设置失败"); SaveFailed?.Invoke(this, "设置暂时无法保存，请检查配置目录权限。"); }
         finally { _writeGate.Release(); }
     }
-    private sealed record PreferenceData(bool AutoResume, double DefaultSpeed, bool PlaylistExpanded, bool InformationExpanded, bool AlwaysOnTop, string Theme);
+    partial void OnAutoResumeChanged(bool value)
+    { if (!value) ResumeMode = "始终从头播放"; else if (ResumeMode == "始终从头播放") ResumeMode = "自动续播"; }
+    partial void OnResumeModeChanged(string value) => AutoResume = value != "始终从头播放";
+    private sealed record PreferenceData(bool AutoResume, double DefaultSpeed, bool PlaylistExpanded, bool InformationExpanded, bool AlwaysOnTop, string Theme,
+        bool RememberSpeed = true, string ResumeMode = "自动续播", PlaybackMode Mode = PlaybackMode.Sequential);
 }

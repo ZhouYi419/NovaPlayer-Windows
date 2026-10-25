@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
@@ -14,8 +14,10 @@
         <ProjectReference Include="../src/NovaPlayer.Infrastructure/NovaPlayer.Infrastructure.csproj" />
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
         <Content Include="../native/win-x64/libmpv-2.dll" Link="native/win-x64/libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <Content Include="../native/win-x64/ffmpeg.exe" Link="native/win-x64/ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
     <Target Name="CheckMpvRuntime" BeforeTargets="PrepareForBuild">
         <Error Condition="!Exists('../native/win-x64/libmpv-2.dll')" Text="Missing libmpv x64 runtime. Run scripts/Setup-Dependencies.ps1 first." />
+        <Error Condition="!Exists('../native/win-x64/ffmpeg.exe')" Text="缺少缩略图运行工具，请先执行 scripts/Setup-Dependencies.ps1。" />
     </Target>
 </Project>

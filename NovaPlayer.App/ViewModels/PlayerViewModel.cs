@@ -9,6 +9,8 @@ using NovaPlayer.App.Services;
 using NovaPlayer.Core.Interfaces;
 using NovaPlayer.Core.Playback;
 using NovaPlayer.Infrastructure.FileSystem;
+using NovaPlayer.Core.Library;
+using NovaPlayer.Infrastructure.Thumbnails;
 
 namespace NovaPlayer.App.ViewModels;
 
@@ -18,8 +20,21 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     private readonly Dispatcher _dispatcher;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, VideoItem> _library = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<VideoItem> _hiddenHistory = [];
     private readonly SemaphoreSlim _importGate = new(1, 1);
+    private readonly IPlaybackStore _store;
+    private readonly ThumbnailService _thumbnails;
+    private readonly SemaphoreSlim _transitionGate = new(1, 1);
+    private readonly DispatcherTimer _saveTimer;
+    private PlayerState _lastSnapshot = new();
+    private long _playRequest, _handledEndSession, _automaticSession;
+    private readonly HashSet<string> _failedAutomaticPaths = new(StringComparer.OrdinalIgnoreCase);
+    private bool _resumeIssued, _shuttingDown;
+    [ObservableProperty] private string? _persistenceWarning;
+    [ObservableProperty] private string? _resumePrompt;
+    public bool HasResumePrompt => !string.IsNullOrEmpty(ResumePrompt);
+    public IReadOnlyList<string> ResumeModes { get; } = ["自动续播", "询问后续播", "始终从头播放"];
+    public IReadOnlyList<string> PlaybackModes { get; } = ["顺序播放", "单曲循环", "列表循环", "关闭连播"];
+    public int PlaybackModeIndex { get => (int)Preferences.Mode; set { if (value is >= 0 and <= 3) { Preferences.Mode = (PlaybackMode)value; OnPropertyChanged(); } } }
     private double? _pendingPosition;
     private bool _disposed;
     [ObservableProperty] private PlayerState _state;
@@ -57,7 +72,7 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     public string PlayIcon => State.IsPaused || State.IsEnded ? "play" : "pause";
     public string VolumeIcon => State.EffectiveMuted ? "mute" : "volume";
     public string PlayText => State.IsPaused || State.IsEnded ? "继续播放" : "暂停播放";
-    public string Status => State.Error ?? (IsImporting ? "正在添加本地视频…" : State.IsLoading ? "正在加载视频…" : State.IsSeeking ? "正在跳转…" :
+    public string Status => State.Error ?? PersistenceWarning ?? (IsImporting ? "正在添加本地视频…" : State.IsLoading ? "正在加载视频…" : State.IsSeeking ? "正在跳转…" :
         State.Speed > 3 && State.Warning is not null ? State.Warning : State.Speed > 8 ? "高倍速已自动静音，降速后恢复原音频状态" : Notice);
     public bool ShowEmpty => !State.IsLoaded && !State.IsLoading;
     public double SeekMaximum => Math.Max(1, State.Duration);
@@ -68,14 +83,18 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     public bool HasHistory => FilteredHistory.Count > 0;
     public bool ShowSearch => !string.IsNullOrWhiteSpace(SearchText);
     public string PlaylistIndex => $"{(CurrentVideo is null ? 0 : Math.Max(0, Playlist.IndexOf(CurrentVideo) + 1))} / {Playlist.Count}";
-    public VideoItem? RecentVideo => History.FirstOrDefault(v => v.Percentage < 95) ?? History.FirstOrDefault();
+    public VideoItem? RecentVideo => History.Where(v => v.HistoryVisible && !v.IsMissing).OrderByDescending(v => v.LastPlayed).FirstOrDefault(v => !v.Completed)
+        ?? History.Where(v => v.HistoryVisible).OrderByDescending(v => v.LastPlayed).FirstOrDefault();
     public string ProgressText => CurrentVideo?.ProgressText ?? "0%";
 
-    public PlayerViewModel(IPlayerEngine engine, Dispatcher dispatcher, PreferencesService preferences)
+    public PlayerViewModel(IPlayerEngine engine, Dispatcher dispatcher, PreferencesService preferences, IPlaybackStore store, ThumbnailService thumbnails)
     {
         _engine = engine; _dispatcher = dispatcher; _state = engine.State; Preferences = preferences;
+        _store = store; _thumbnails = thumbnails;
+        _saveTimer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, SaveTimerTick, dispatcher);
         _engine.StateChanged += EngineStateChanged;
         Preferences.SaveFailed += SettingsSaveFailed;
+        Preferences.PropertyChanged += PreferenceChanged;
         foreach (var choice in SpeedChoices) choice.IsSelected = choice.Value == State.Speed;
     }
     private void SettingsSaveFailed(object? sender, string message)
@@ -91,20 +110,7 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     partial void OnStateChanged(PlayerState value)
     {
         foreach (var choice in SpeedChoices) choice.IsSelected = choice.Value == value.Speed;
-        if (value.FilePath is { } path && _library.TryGetValue(path, out var item))
-        {
-            if (CurrentVideo != item) CurrentVideo = item;
-            if (value.IsLoaded)
-            {
-                item.Duration = value.Duration;
-                item.Position = value.Position;
-                item.Speed = value.Speed;
-                item.HasSpeed = true;
-                if (!History.Contains(item) && !_hiddenHistory.Contains(item)) { item.LastPlayed = DateTime.UtcNow; History.Insert(0, item); RefreshHistory(); }
-                if (_pendingPosition is { } position && value.Duration > 0)
-                { _pendingPosition = null; if (position > 0) _engine.Seek(position); }
-            }
-        }
+        ObservePlayback(value);
         foreach (string name in new[] { nameof(FileName), nameof(VideoInfo), nameof(Resolution), nameof(FrameRate), nameof(TimeText),
             nameof(SpeedText), nameof(PlayText), nameof(PlayIcon), nameof(VolumeIcon), nameof(Status), nameof(ShowEmpty), nameof(SeekMaximum), nameof(ProgressText), nameof(RecentVideo) })
             OnPropertyChanged(name);
@@ -118,6 +124,7 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     {
         foreach (var item in Playlist) item.IsCurrent = item == value;
         OnPropertyChanged(nameof(PlaylistIndex)); OnPropertyChanged(nameof(VideoInfo));
+        if (!_restoringLibrary) _ = PersistPlaylistAsync();
     }
     partial void OnNoticeChanged(string value) => OnPropertyChanged(nameof(Status));
     partial void OnIsImportingChanged(bool value) => OnPropertyChanged(nameof(Status));
@@ -134,13 +141,10 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
             {
                 IsImporting = true;
                 var imported = await MediaImportService.ImportAsync(paths, _lifetime.Token);
-                if (_disposed) return;
-                foreach (var video in imported.Videos)
-                {
-                    if (!_library.TryGetValue(video.Path, out var item))
-                    { item = new VideoItem(video.Path, video.Size); _library.Add(video.Path, item); }
-                    if (!Playlist.Contains(item)) Playlist.Add(item);
-                }
+                if (_disposed || _shuttingDown) return;
+                var records = await RegisterImportedAsync(imported.Videos);
+                foreach (var record in records)
+                { var item = Materialize(record); if (!Playlist.Contains(item)) Playlist.Add(item); }
                 NotifyCollections();
                 if (imported.Videos.Count > 0)
                 {
@@ -154,35 +158,16 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { Notice = ex.Message; }
     }
-    [RelayCommand] private void PlayVideo(VideoItem? item)
-    {
-        if (item is null || !IsReady) return;
-        if (!item.Exists) { Notice = "视频文件不存在，请重新定位。"; LocateRequested?.Invoke(this, item); return; }
-        CurrentPage = "首页"; SearchText = "";
-        _hiddenHistory.Remove(item);
-        if (string.Equals(State.FilePath, item.Path, StringComparison.OrdinalIgnoreCase) && State.IsLoaded)
-        { Execute(() => { if (State.IsEnded) _engine.Seek(0); _engine.SetPaused(false); }); return; }
-        Execute(() =>
-        {
-            _pendingPosition = ResumePolicy.Position(item.Position, item.Duration, Preferences.AutoResume);
-            CurrentVideo = item;
-            _engine.SetSpeed(item.HasSpeed ? item.Speed : Preferences.DefaultSpeed);
-            _engine.Open(item.Path);
-            item.LastPlayed = DateTime.UtcNow;
-            if (History.Remove(item)) History.Insert(0, item);
-            Notice = "视频已打开";
-            RefreshHistory();
-        });
-    }
+    [RelayCommand] private void PlayVideo(VideoItem? item) => _ = PlayItemAsync(item);
     public async Task RelocateAsync(VideoItem item, string replacement)
     {
-        await ImportFilesAsync([replacement]);
-        if (_library.TryGetValue(Path.GetFullPath(replacement), out var located))
-        { located.Position = item.Position; located.Duration = item.Duration; located.Speed = item.Speed; located.HasSpeed = item.HasSpeed; PlayVideo(located); }
+        await RelocateItemAsync(item, replacement);
     }
-    [RelayCommand] private void RemoveVideo(VideoItem? item)
+    [RelayCommand]
+    private void RemoveVideo(VideoItem? item)
     {
         if (item is null) return;
+        _ = SaveCurrentAsync();
         int index = Playlist.IndexOf(item);
         bool current = item == CurrentVideo;
         Playlist.Remove(item);
@@ -201,12 +186,14 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
         int index = Playlist.IndexOf(item), target = index + offset;
         if (index >= 0 && target >= 0 && target < Playlist.Count) Playlist.Move(index, target);
         OnPropertyChanged(nameof(PlaylistIndex));
+        _ = PersistPlaylistAsync();
     }
     public void Reorder(VideoItem from, VideoItem to)
     {
         int source = Playlist.IndexOf(from), target = Playlist.IndexOf(to);
         if (source >= 0 && target >= 0) Playlist.Move(source, target);
         OnPropertyChanged(nameof(PlaylistIndex));
+        _ = PersistPlaylistAsync();
     }
     [RelayCommand] private void Next() => Step(1);
     [RelayCommand] private void Previous() => Step(-1);
@@ -217,12 +204,16 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
             if (Playlist[next].Exists) { PlayVideo(Playlist[next]); return; }
         Notice = offset > 0 ? "已经是最后一个可播放视频。" : "已经是第一个可播放视频。";
     }
-    [RelayCommand] private void DeleteHistory(VideoItem? item)
-    { if (item is not null) { History.Remove(item); _hiddenHistory.Add(item); } RefreshHistory(); }
-    [RelayCommand] private void ClearHistory()
+    [RelayCommand]
+    private void DeleteHistory(VideoItem? item)
+    { if (item is not null) { History.Remove(item); item.HistoryVisible = false; _ = PersistAsync(() => _store.SetHistoryVisibilityAsync(item.Path, false)); } RefreshHistory(); }
+    [RelayCommand]
+    private void ClearHistory()
     {
-        if (Confirm?.Invoke("清空本次会话的播放记录？此操作不会删除视频或清空播放列表。") != true) return;
-        _hiddenHistory.UnionWith(History); History.Clear(); RefreshHistory(); Notice = "播放记录已清空，原视频与队列已保留。";
+        if (Confirm?.Invoke("清空全部播放记录？此操作不会删除视频或清空播放列表。") != true) return;
+        foreach (var item in _library.Values) item.HistoryVisible = false;
+        History.Clear(); RefreshHistory(); Notice = "播放记录已清空，原视频与队列已保留。";
+        _ = PersistAsync(() => _store.SetHistoryVisibilityAsync(null, false));
     }
     private void RefreshSearch()
     {
@@ -234,25 +225,34 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     private void RefreshHistory()
     {
         FilteredHistory.Clear();
-        foreach (var item in History.Where(v => v.Name.Contains(HistorySearch.Trim(), StringComparison.OrdinalIgnoreCase))) FilteredHistory.Add(item);
+        foreach (var item in History.Where(v => v.HistoryVisible && v.Name.Contains(HistorySearch.Trim(), StringComparison.OrdinalIgnoreCase)).OrderByDescending(v => v.LastPlayed)) FilteredHistory.Add(item);
         OnPropertyChanged(nameof(HasHistory)); OnPropertyChanged(nameof(RecentVideo)); RefreshSearch();
     }
     private void NotifyCollections()
-    { OnPropertyChanged(nameof(HasPlaylist)); OnPropertyChanged(nameof(PlaylistIndex)); RefreshSearch(); }
+    { OnPropertyChanged(nameof(HasPlaylist)); OnPropertyChanged(nameof(PlaylistIndex)); RefreshSearch(); if (!_restoringLibrary) _ = PersistPlaylistAsync(); }
     [RelayCommand] private void Navigate(string page) { if (page is "首页" or "播放历史" or "设置") CurrentPage = page; }
     [RelayCommand] private void TogglePlaylist() => Preferences.PlaylistExpanded = !Preferences.PlaylistExpanded;
     [RelayCommand] private void ToggleInformation() => Preferences.InformationExpanded = !Preferences.InformationExpanded;
     [RelayCommand] private void SetTheme(string theme) { if (Themes.Contains(theme)) Preferences.Theme = theme; }
     [RelayCommand] private void ShowInformation() { CurrentPage = "首页"; Preferences.InformationExpanded = true; InformationTab = 1; }
     [RelayCommand] private void ShowShortcuts() => CurrentPage = "设置";
-    [RelayCommand] private void Reveal(VideoItem? item)
+    [RelayCommand] private void RequestRelocate(VideoItem? item) { if (item is not null) LocateRequested?.Invoke(this, item); }
+    [RelayCommand] private void OpenDatabaseFolder() => Execute(() => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{Path.GetDirectoryName(DatabasePath)}\"") { UseShellExecute = true }));
+    [RelayCommand]
+    private void Reveal(VideoItem? item)
     {
         var path = item?.Path ?? State.FilePath;
         if (path is null) { Notice = "请先打开视频。"; return; }
         if (!File.Exists(path)) { Notice = "文件不存在，请重新定位。"; return; }
         Execute(() => Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true }));
     }
-    public void SeekTo(double seconds) { if (State.IsLoaded) Execute(() => _engine.Seek(seconds)); }
+    public void SeekTo(double seconds)
+    {
+        if (!State.IsLoaded) return;
+        // 用户主动跳转优先于尚未完成的自动续播，避免旧续播目标阻止后续状态同步。
+        _pendingPosition = null; _resumeIssued = false; ResumePrompt = null;
+        Execute(() => _engine.Seek(seconds));
+    }
     public void ChangeSpeed(double speed) => Execute(() => _engine.SetSpeed(speed));
     public void ChangeVolume(double volume) => Execute(() => _engine.SetVolume(volume));
     [RelayCommand] private void Open() => OpenRequested?.Invoke(this, EventArgs.Empty);
@@ -262,11 +262,13 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     [RelayCommand] private void LoadSubtitle() => SubtitleRequested?.Invoke(this, EventArgs.Empty);
     [RelayCommand] private void ToggleSubtitles() => Execute(() => _engine.SetSubtitlesVisible(!State.SubtitlesVisible));
     public void AddSubtitle(string path) => Execute(() => _engine.LoadSubtitle(path));
-    [RelayCommand] private void Restart() { if (State.IsLoaded) Execute(() => { _engine.Seek(0); _engine.SetPaused(false); }); }
-    [RelayCommand] private void TogglePause() => Execute(() =>
+    [RelayCommand] private void Restart() { if (CurrentVideo is not null) _ = PlayItemAsync(CurrentVideo, true); else if (State.IsLoaded) Execute(() => { _engine.Seek(0); _engine.SetPaused(false); }); }
+    [RelayCommand] private void PlayFromStart(VideoItem? item) { if (item is not null) _ = PlayItemAsync(item, true); }
+    [RelayCommand]
+    private void TogglePause() => Execute(() =>
     {
         if (!State.IsLoaded) return;
-        if (State.IsEnded) { _engine.Seek(0); _engine.SetPaused(false); }
+        if (State.IsEnded && CurrentVideo is not null) _ = PlayItemAsync(CurrentVideo, true);
         else _engine.SetPaused(!State.IsPaused);
     });
     [RelayCommand] private void Backward() => SeekTo(State.Position - 10);
@@ -287,8 +289,10 @@ public partial class PlayerViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _disposed = true; _lifetime.Cancel();
+        _saveTimer.Stop();
         _engine.StateChanged -= EngineStateChanged;
         Preferences.SaveFailed -= SettingsSaveFailed;
+        Preferences.PropertyChanged -= PreferenceChanged;
     }
 }
 

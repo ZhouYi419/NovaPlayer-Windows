@@ -15,6 +15,7 @@ public sealed class MpvPlayerEngine : IPlayerEngine
     private volatile bool _stopping;
     private PlayerState _state = new();
     private double _requestedSpeed = 1;
+    private long _sessionId;
 
     public PlayerState State => Volatile.Read(ref _state);
     public event EventHandler<PlayerState>? StateChanged;
@@ -64,6 +65,7 @@ public sealed class MpvPlayerEngine : IPlayerEngine
         if (!File.Exists(path)) throw new FileNotFoundException("视频文件不存在，请重新选择文件。", path);
         Update(s => new PlayerState
         {
+            SessionId = Interlocked.Increment(ref _sessionId),
             FilePath = path,
             IsLoading = true,
             Speed = s.Speed,

@@ -7,7 +7,7 @@
         </Grid.RowDefinitions>
         <StackPanel>
             <TextBlock Text="播放历史" FontSize="25" FontWeight="SemiBold" />
-            <TextBlock Text="本次会话的观看记录 · 关闭应用后不保留" Foreground="{DynamicResource TextMuted}" Margin="0,8,0,0" />
+            <TextBlock Text="观看记录保存在本机 · 随时继续观看" Foreground="{DynamicResource TextMuted}" Margin="0,8,0,0" />
         </StackPanel>
         <DockPanel Grid.Row="1" Margin="0,16,0,12">
             <Button DockPanel.Dock="Right" Content="清空历史" Command="{Binding ClearHistoryCommand}" />
@@ -24,18 +24,20 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <Border Background="{DynamicResource InputBrush}" Width="88" Height="58" CornerRadius="6">
-                                <c:Icon Kind="video" Width="28" Height="28" Foreground="{DynamicResource TextMuted}" />
+                                <c:VideoThumbnail Item="{Binding}" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,20,0">
                                 <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="15" ToolTip="{Binding Path}" />
-                                <TextBlock Text="{Binding DurationText}" Foreground="{DynamicResource TextMuted}" Margin="0,6,0,6" />
+                                <TextBlock Text="{Binding AvailabilityText}" Foreground="{DynamicResource TextMuted}" Margin="0,6,0,6" />
                                 <ProgressBar Maximum="100" Value="{Binding Percentage, Mode=OneWay}" />
                                 <TextBlock Text="{Binding LastPlayedText}" Foreground="{DynamicResource TextMuted}" FontSize="11" Margin="0,5,0,0" />
                             </StackPanel>
                             <StackPanel Grid.Column="2" Orientation="Horizontal">
                                 <TextBlock Text="{Binding ProgressText}" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,16,0" />
                                 <Button Content="继续播放" Command="{Binding DataContext.PlayVideoCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}" Style="{StaticResource SurfaceButton}" />
-                                <Button Content="移除记录" Command="{Binding DataContext.DeleteHistoryCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" CommandParameter="{Binding}" Margin="8,0,0,0" />
+                                <Button Click="HistoryMore_Click" Tag="{Binding}" Style="{StaticResource IconButton}" ToolTip="历史操作" Margin="8,0,0,0">
+                                    <c:Icon Kind="more" />
+                                </Button>
                             </StackPanel>
                         </Grid>
                     </Border>

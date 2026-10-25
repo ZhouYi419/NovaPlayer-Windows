@@ -14,6 +14,8 @@ using NovaPlayer.Core.Playback;
 using NovaPlayer.Core.Presentation;
 using NovaPlayer.Infrastructure.Playback;
 using Serilog;
+using NovaPlayer.Core.Interfaces;
+using NovaPlayer.Infrastructure.Thumbnails;
 
 namespace NovaPlayer.App;
 
@@ -29,16 +31,18 @@ public partial class MainWindow : Window
     private Rect _normalBounds;
     private bool _closing, _dialogOpen;
     private Point _dragOrigin;
+    private bool _closeCompleted;
+    private Task? _shutdownTask;
     internal bool ShouldShowPlayerOverlay => !_closing && !_dialogOpen && _viewModel.IsHome;
     internal PlayerViewModel ViewModel => _viewModel;
     internal VideoHost VideoHost => _host;
 
-    public MainWindow(MpvPlayerEngine engine, string[] args, PreferencesService preferences)
+    public MainWindow(MpvPlayerEngine engine, string[] args, PreferencesService preferences, IPlaybackStore store, ThumbnailService thumbnails)
     {
         _engine = engine; _args = args;
         InitializeComponent();
         _theme = new ThemeService(preferences);
-        _viewModel = new PlayerViewModel(engine, Dispatcher, preferences); DataContext = _viewModel;
+        _viewModel = new PlayerViewModel(engine, Dispatcher, preferences, store, thumbnails); DataContext = _viewModel;
         _viewModel.OpenRequested += (_, _) => OpenFiles();
         _viewModel.OpenFolderRequested += (_, _) => OpenFolder();
         _viewModel.FullscreenRequested += (_, _) => ToggleFullscreen();
@@ -66,15 +70,18 @@ public partial class MainWindow : Window
             var renderer = _host.Renderer!;
             renderer.Failed += (_, error) => Dispatcher.BeginInvoke(() => { _viewModel.Notice = error; _viewModel.IsReady = false; });
             await renderer.Ready.Task;
+            await _viewModel.InitializeLibraryAsync();
             _viewModel.IsReady = true; _viewModel.Notice = "播放内核已就绪";
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
-            if (_args.Length >= 3 && _args[0] is "--verify" or "--verify-shell")
+            if (_args.Length >= 3 && _args[0].StartsWith("--verify", StringComparison.Ordinal))
             {
-                int exit = _args[0] == "--verify-shell"
+                int exit = _args[0].StartsWith("--verify-library-", StringComparison.Ordinal)
+                    ? await StageThreeVerification.RunAsync(this, _engine, renderer, _overlay!, _args[0], _args[1], _args[2])
+                    : _args[0] == "--verify-shell"
                     ? await StageTwoVerification.RunAsync(this, _engine, renderer, _overlay!, _args[1], _args[2])
                     : await StageOneVerification.RunAsync(this, _engine, renderer, _viewModel, _overlay!, _args[1], _args[2]);
                 if (_viewModel.IsMiniPlayer) ToggleMiniPlayer();
-                Close(); Application.Current.Shutdown(exit);
+                await CloseSessionAsync(); Application.Current.Shutdown(exit);
             }
             else if (_args.Length > 0) await _viewModel.ImportFilesAsync(_args.Where(File.Exists));
         }
@@ -82,7 +89,7 @@ public partial class MainWindow : Window
         {
             Log.Error(ex, "播放器初始化或验收失败");
             _viewModel.Notice = $"播放器初始化失败：{ex.Message}"; _viewModel.IsReady = false;
-            if (_args.FirstOrDefault()?.StartsWith("--verify", StringComparison.Ordinal) == true) { Close(); Application.Current.Shutdown(1); }
+            if (_args.FirstOrDefault()?.StartsWith("--verify", StringComparison.Ordinal) == true) { await CloseSessionAsync(); Application.Current.Shutdown(1); }
         }
     }
     private async void OpenFiles()
@@ -298,15 +305,27 @@ public partial class MainWindow : Window
             _viewModel.Reorder((VideoItem)e.Data.GetData(typeof(VideoItem)), target);
         e.Handled = true;
     }
-    protected override void OnClosing(CancelEventArgs e)
+    protected override async void OnClosing(CancelEventArgs e)
     {
+        if (_closeCompleted) { base.OnClosing(e); return; }
         if (_viewModel.IsMiniPlayer && !_closing) { e.Cancel = true; ToggleMiniPlayer(); return; }
         base.OnClosing(e);
-        if (e.Cancel || _closing) return;
-        _closing = true; _overlay?.Close(); _viewModel.Dispose();
-        // 设置写入不依赖界面调度，退出前等待最后一次快照落盘，避免快速关闭时丢失偏好。
-        _viewModel.Preferences.SaveAsync().GetAwaiter().GetResult();
-        _viewModel.PropertyChanged -= ViewModelChanged; _viewModel.Preferences.PropertyChanged -= PreferencesChanged; _theme.Dispose();
-        _host.StopRendering(); _host.Dispose(); _engine.Dispose();
+        if (e.Cancel) return;
+        e.Cancel = true;
+        await CloseSessionAsync();
+    }
+    internal Task CloseSessionAsync() => _shutdownTask ??= CloseCoreAsync();
+    private async Task CloseCoreAsync()
+    {
+        _closing = true; _overlay?.Close();
+        try { await _viewModel.ShutdownAsync(); }
+        catch (Exception ex) { Log.Error(ex, "退出时保存播放记录失败"); }
+        finally
+        {
+            _viewModel.Dispose();
+            _viewModel.PropertyChanged -= ViewModelChanged; _viewModel.Preferences.PropertyChanged -= PreferencesChanged; _theme.Dispose();
+            _host.StopRendering(); _host.Dispose(); _engine.Dispose();
+            _closeCompleted = true; Close();
+        }
     }
 }

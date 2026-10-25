@@ -8,9 +8,12 @@
 | CommunityToolkit.Mvvm | NuGet 8.4.0 | MIT |
 | Serilog | NuGet 4.3.0 | Apache-2.0 |
 | Serilog.Sinks.File | NuGet 7.0.0 | Apache-2.0 |
+| Microsoft.Data.Sqlite.Core | NuGet 10.0.13 | Microsoft SQLite 托管访问层，MIT |
+| SQLitePCLRaw.bundle_e_sqlite3 / core / provider | NuGet 3.0.5 | Apache-2.0，按 NuGet 包随附声明保留 |
+| SQLite 原生运行库 | NuGet SQLite 3.53.4，由 bundle 引入 | 按该包 `LICENSE.txt` 保留 SQLite 与构建分发声明 |
 | xUnit / 测试 SDK | 见测试项目 PackageReference | 仅开发与测试使用，以 NuGet 包随附许可为准 |
 | libmpv Windows x64 | shinchiro/mpv-winbuild-cmake，20261021，mpv e471496c56 | 第三方预编译，包含 FFmpeg 等组件；按该构建的实际启用项审查 GPL/LGPL 及源码提供义务，不能将其假定为 MIT |
-| FFmpeg 测试工具 | 同一发布，git 9a861e968 | 只用于生成测试视频，不由应用启动或随应用发布；实际构建包含 GPL 组件 |
+| FFmpeg 提帧与测试工具 | 同一发布，git 9a861e968 | 第三阶段起随便携版部署，由应用在后台生成封面；实际构建包含 GPL 组件，发布时须按实际构建完成许可证及对应源码分发审查 |
 | 7zr 解压工具 | 7-zip.org 官方下载 | 仅用于本地依赖解压，保留来源，不随应用发布 |
 
 原生运行库不是 NuGet mpv 托管替代品，使用 libmpv 官方 ABI 直接调用。
