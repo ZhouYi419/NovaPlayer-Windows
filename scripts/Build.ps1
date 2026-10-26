@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([ValidateSet('Debug', 'Release')][string]$Configuration = 'Release', [switch]$Publish)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/Use-DevelopmentEnvironment.ps1"

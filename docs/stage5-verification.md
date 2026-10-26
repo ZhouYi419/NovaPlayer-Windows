@@ -76,3 +76,16 @@
 | 自有 PowerShell 语法 | 15 个脚本无解析错误 | PowerShell Parser |
 
 有限持续验证不替代数小时压力、更多 GPU/驱动或 Windows 10 的真实环境验收。当前系统的结果与待完成范围均保留，未将未测项改为通过。
+
+## 打包终端兼容修复（2026-10-26）
+
+用户的 Rider 终端使用 Windows PowerShell，无法识别 `pwsh`。现已让构建/打包入口兼容 Windows PowerShell 5.1，无需借用开发工具内部的 PowerShell 7，也无需修改 PATH。
+
+- 打包链路的 7 个脚本使用带 BOM 的 UTF-8；JSON/XML 显式按 UTF-8 读取，保留中文和版权字符。
+- 依赖枚举改用 PSObject.Properties；发布清单从核对后的目录前缀提取相对路径，移除旧运行时不支持的接口。
+- FFmpeg 版本/许可证输出通过 ProcessStartInfo 的双管道异步读取；按退出码判断成功，避免正常标准错误输出被误判。设置 30 秒超时，finally 释放进程对象。
+- 推荐命令：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Release.ps1`。执行策略参数仅作用于本次子进程，不修改系统或用户的长期策略。
+
+在本机 Windows PowerShell **5.1.22621.2428 / .NET Framework 4.8** 下实测默认完整打包入口成功，Release **0 警告、0 错误，60 / 60 单元测试通过**，Inno Setup 成功生成安装包。日志：`artifacts/windows-powershell-build-final.log`。随后分别使用 Windows PowerShell 5.1 和 PowerShell 7 校验发布清单，444 个文件及交付归档哈希均通过。
+
+本次验证覆盖打包终端兼容性，没有重新运行前述图形界面和安装卸载验收。重新构建的产物哈希以当前 `release-manifest.json` 与 `SHA256SUMS.txt` 为准；前述 GUI/安装报告保留为原构建的历史证据，不将旧报告哈希冒充为本轮产物哈希。Windows 10 实机验证与发行许可的待办保持原结论。

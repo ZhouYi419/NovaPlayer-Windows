@@ -1,4 +1,4 @@
-$taskRoot = Split-Path $PSScriptRoot -Parent
+﻿$taskRoot = Split-Path $PSScriptRoot -Parent
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_CLI_HOME = Join-Path $taskRoot '.tools/cli'
 $env:NUGET_PACKAGES = Join-Path $taskRoot '.tools/packages'

@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch]$SkipBuild)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/Use-DevelopmentEnvironment.ps1"
@@ -53,8 +53,11 @@ try {
 $resolvedSource = (Resolve-Path -LiteralPath $sourceFolder).Path
 if (!$resolvedSource.StartsWith([IO.Path]::GetFullPath($release) + [IO.Path]::DirectorySeparatorChar + 'source-', [StringComparison]::OrdinalIgnoreCase)) { throw '源码临时目录清理范围异常。' }
 Remove-Item -LiteralPath $resolvedSource -Recurse -Force
+# 从已解析的目录前缀提取相对路径，兼容 Windows PowerShell 使用的 .NET Framework。
+$publishPrefix = (Resolve-Path -LiteralPath $publish).Path.TrimEnd([char[]]'\/') + [IO.Path]::DirectorySeparatorChar
 $files = @(Get-ChildItem -LiteralPath $publish -File -Recurse | ForEach-Object {
-    @{ path = [IO.Path]::GetRelativePath($publish, $_.FullName); size = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
+    if (!$_.FullName.StartsWith($publishPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw '发布清单文件超出目录范围。' }
+    @{ path = $_.FullName.Substring($publishPrefix.Length); size = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
 })
 @{ version = '1.0.0-rc.1'; architecture = 'win-x64'; selfContained = $true; externalDistributionReady = $false; signingStatus = [string](Get-AuthenticodeSignature -LiteralPath (Join-Path $release 'NovaPlayer-1.0.0-rc.1-win-x64-setup.exe')).Status; files = $files } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $release 'release-manifest.json') -Encoding utf8
 Get-ChildItem -LiteralPath $release -File | Where-Object Extension -in '.exe','.zip' | ForEach-Object { (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash + '  ' + $_.Name } | Set-Content -LiteralPath (Join-Path $release 'SHA256SUMS.txt') -Encoding ascii

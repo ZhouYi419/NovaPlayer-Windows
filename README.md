@@ -1,10 +1,10 @@
 # Nova Player
 
-Windows x64 本地视频播放器。已实现内核、主界面、核心功能闭环及高级播放体验；第五阶段提供 `1.0.0-rc.1` 内部验收候选包与发布工具。通用兼容目标为 Windows 10 22H2 x64 和 Windows 11 x64；Windows 10 真实目标机与原生依赖对应源码/发行许可条件尚未完成，不标为正式发行通过。
+Windows x64 本地视频播放器。通用兼容目标为 Windows 10 22H2 x64 和 Windows 11 x64；Windows 10 真实目标机与原生依赖对应源码/发行许可条件尚未完成，不标为正式发行通过。
 
 ## 运行
 
-第五阶段程序为 `artifacts/release/1.0.0-rc.1/player/NovaPlayer.exe`。双击运行即可，无需全局安装 .NET 10；必须保留整个 `player` 目录。同目录上一级提供 Windows 安装包、便携 ZIP、项目源码 ZIP、逐文件清单与 SHA256。构建命令及发行条件见 [第五阶段发布交付](docs/stage5-release.md)。
+构建命令及发行条件见 [发布](docs/stage5-release.md)。
 
 使用“打开视频”、`Ctrl+O`、拖入文件或命令行文件参数导入本地视频。支持多选文件、拖入文件夹及 `Ctrl+Shift+O` 选择文件夹。文件夹递归导入、过滤非视频、去重，单次最多添加 10000 个视频。
 
@@ -27,17 +27,9 @@ SQLite 保存每个视频的进度、独立倍速、观看时间、完成状态�
 | 画中画 / 返回主窗口 | Ctrl + P |
 | 显示 / 隐藏字幕 | Ctrl + S |
 
-表中为默认绑定。设置页可直接录入组合键、清除绑定、查看冲突及恢复全部默认键；修改立即生效并跨重启保存。文本框、密码框与下拉框编辑时不触发播放器快捷键。快进 / 快退间隔也可设置。
-
-倍速菜单支持全部 PRD 预设及 0.25～15 自定义输入。默认超过 8× 自动静音，降速后恢复用户此前的音频状态；该策略可在设置页关闭。全屏和画中画默认静止 3 秒隐藏控制层，可调整为 1～10 秒，菜单打开和拖动进度期间保持显示。
-
-字幕菜单读取真实内嵌与外挂轨道，支持 SRT、ASS、SSA、同目录同名字幕自动加载、语言选择、开关、字号和时间偏移。ASS/SSA 字号采用保留样式的等比例缩放；正偏移延后，负偏移提前。“更多操作”提供音轨选择和画面比例，单音轨时不展示无效切换项。字幕或轨道操作失败只提示，不终止播放。
-
-画中画默认约 400×225、最小 280×158，支持拖动、缩放、暂停、进度、静音、倍速及字幕 / 音轨菜单。小窗与主界面复用同一播放会话、视频宿主和 GPU 上下文，切换保持进度、倍速、音量、音轨与字幕状态。关闭小窗返回主界面；记忆小窗位置和尺寸，可选择记忆主窗口位置与尺寸。
-
 ## 从源码构建
 
-在项目根目录使用 PowerShell：
+在项目根目录使用 Windows 自带的 PowerShell 5.1 或 PowerShell 7 均可，无需先运行 `pwsh`：
 
 ```powershell
 ./scripts/Setup-Dependencies.ps1 -IncludeVerificationTools
@@ -50,29 +42,12 @@ SQLite 保存每个视频的进度、独立倍速、观看时间、完成状态�
 ./scripts/Test-ReleaseManifest.ps1
 ```
 
+日常打安装包，在 Rider 底部终端执行下面的命令。它使用 Windows 自带的 PowerShell，仅允许本次子进程执行项目脚本，不改变系统或用户的长期执行策略：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "E:\RiderFile\NovaPlayer\scripts\Build-Release.ps1"
+```
+
+成功后安装程序位于 `artifacts/release/1.0.0-rc.1/NovaPlayer-1.0.0-rc.1-win-x64-setup.exe`；再运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/Test-ReleaseManifest.ps1` 核对文件完整性。
+
 首次准备依赖和 NuGet 还原需要网络。程序播放本地视频时不需要网络。SDK 安装于 `.tools/dotnet`，不改变全局 SDK；构建脚本自动使用本地 SDK。
-
-`Verify-Stage1.ps1` 默认生成 90 秒 H.264/AAC 测试视频，也接受 `-VideoPath 'D:\视频\示例.mp4'`，建议选取至少 45 秒的可解码视频。验证需要可用的 Windows 图形桌面和 OpenGL 驱动，会创建播放器窗口并自动退出。报告输出至 `artifacts/stage1-summary.json` 和对应的单次 JSON。
-
-## 项目结构
-
-- `NovaPlayer.App/`：保留现有 WPF 项目位置；MVVM、视频宿主、控制浮层、显式启用的集成验收入口。
-- `src/NovaPlayer.Core/`：播放/持久化接口、不可变状态、视频记录、续播与队列规则。
-- `src/NovaPlayer.Infrastructure/`：libmpv、GPU 渲染、串行后台 SQLite 服务、FFmpeg 封面缓存。
-- `tests/NovaPlayer.Tests/`：xUnit 边界测试。
-- `native/win-x64/`：本地 libmpv 与 FFmpeg 运行工具，通过脚本下载校验，忽略 Git 跟踪。
-- `docs/`：渲染方案、验收证据及当前范围。
-
-日志位于 `%LOCALAPPDATA%\NovaPlayer\logs`，按天轮转，保留最近 14 份。界面与播放偏好存放在 `%LOCALAPPDATA%\NovaPlayer\settings\appearance.json`，快捷键存放在同目录的 `shortcuts.json`。快捷设置和设置页共用同一个配置实例，退出前刷新最后一次设置快照。损坏快捷键配置使用默认值，保持原文件；首次修改时先创建原件备份。
-
-数据库位于 `%LOCALAPPDATA%\NovaPlayer\data\player.db`；封面位于 `%LOCALAPPDATA%\NovaPlayer\cache\thumbnails`。进度每 5 秒及暂停、跳转、倍速变化、切换、自然结束、退出时保存。SQLite 使用参数化 SQL、版本迁移和事务；写入失败只提示并记录日志，保持播放继续。损坏数据库先归档原文件和日志文件，再尝试恢复。封面以路径、大小、修改时间建立指纹，启动时按 30 天 / 2048 张 / 256 MiB 上限清理。未读到的媒体信息显示未知，不使用示例数据。
-
-主界面支持深色、浅色、跟随系统主题；小于 1200 像素时隐藏播放列表，小于 1050 像素时导航切换为图标模式，底部信息在窄窗口改为纵向排列。设置页支持自动字幕、硬件解码、音调修正、自动静音、窗口记忆和控制栏隐藏时间；自动字幕与硬件解码在下次打开媒体时生效，避免改变当前暂停位置。数据管理可查看数据库位置、打开日志及恢复默认设置，保留历史与视频。
-
-第三阶段脚本连续启动三个独立进程，共享专用测试档案，验证真实跨进程保存与恢复；只操作样片副本，不使用日常播放档案。图形验收请顺序执行，避免多个窗口互相遮挡原生命中测试。
-
-第四阶段脚本生成双音轨、双内嵌字幕及外挂字幕样片，验证实际 GPU 字幕像素、快捷键分发、小窗 / 全屏转换，并启动第二个独立进程验证配置恢复。支持 `-PlayerPath artifacts/player/NovaPlayer.exe` 直接验收便携版。
-
-第五阶段使用 Inno Setup 当前用户安装、七档应用图标、12 种视频“打开方式”候选注册；默认播放器由用户在 Windows 设置中选择。卸载保留历史、进度和设置。发布脚本导出实际依赖许可、构建配置与校验和，发现原生文件或许可类型变化时停止。已核查的原生构建启用 GPLv3；缺少完整对应源码与自有代码许可时，只输出明确标识的内部验收候选包。自有代码的发行许可需由权利人决定。
-
-详细结果见 [第五阶段发布交付](docs/stage5-release.md)、[第五阶段验收记录](docs/stage5-verification.md)、[第五阶段逐环节代码说明](docs/stage5-code-walkthrough.md)、[第四阶段验收记录](docs/stage4-verification.md)、[第四阶段逐环节代码说明](docs/stage4-code-walkthrough.md)、[第三阶段验收记录](docs/stage3-verification.md)、[第一阶段验收记录](docs/stage1-verification.md)、[第二阶段验收记录](docs/stage2-verification.md)，依赖来源见 [第三方依赖说明](THIRD_PARTY.md)。

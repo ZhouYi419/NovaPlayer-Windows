@@ -11,7 +11,7 @@
 ./scripts/Test-ReleaseManifest.ps1
 ```
 
-PowerShell 7。首次构建联网获取固定 SDK、NuGet、原生依赖和 Inno Setup；运行/安装不下载依赖。工具均位于 `.tools`。Inno Setup 固定 6.7.3，下载 SHA256 和已解压编译器 SHA256 均固定，下载后验证官方签名。
+打包支持 Windows 自带的 PowerShell 5.1 和 PowerShell 7，无需先调用 `pwsh` 或把开发工具内部的 Shell 加入 PATH。如果终端限制脚本执行，在项目根目录执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Release.ps1`；该参数仅作用于本次子进程，不更改系统或用户的长期执行策略。首次构建联网获取固定 SDK、NuGet、原生依赖和 Inno Setup；运行/安装不下载依赖。工具均位于 `.tools`。Inno Setup 固定 6.7.3，下载 SHA256 和已解压编译器 SHA256 均固定，下载后验证官方签名。
 
 默认执行 Release 构建与单元测试，然后显式还原 `win-x64` 运行时资产，以自包含模式生成 `NovaPlayer.exe`。构建发布前仅清理经过绝对路径核对的版本输出目录，防止旧文件混入；`-SkipBuild` 仅供开发时对现有发布目录重新打包。
 

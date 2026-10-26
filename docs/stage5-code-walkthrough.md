@@ -35,11 +35,15 @@ Build.ps1 负责还原、Release 构建及单元测试；此处补齐 RID 运行
 `scripts/Export-DependencyAudit.ps1`：
 
 ```powershell
-$deps = Get-Content -LiteralPath (Join-Path $publish 'NovaPlayer.deps.json') -Raw | ConvertFrom-Json -AsHashtable
-$packages = @($deps.libraries.GetEnumerator() | Where-Object { $_.Value.type -eq 'package' } | ForEach-Object Key)
+$deps = Get-Content -LiteralPath (Join-Path $publish 'NovaPlayer.deps.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+$packages = @($deps.libraries.PSObject.Properties | Where-Object { $_.Value.type -eq 'package' } | ForEach-Object Name)
 ```
 
 再合并 runtimeconfig 中 includedFrameworks 的 .NET Core / Desktop Runtime 包。按 id/version 查找本地 NuGet 缓存，保留 nuspec、版权、许可证和 notices，记录 NuGet 原始包 SHA512。新许可表达式不在已审查范围时停止。
+
+依赖 JSON 使用两代 Shell 均支持的对象属性枚举；清单相对路径从核对后的绝对目录前缀提取，避免使用 .NET Framework 缺少的 Path.GetRelativePath。打包入口及其关联脚本保存为带 BOM 的 UTF-8，并显式以 UTF-8 读取 JSON/XML，防止 Windows PowerShell 5.1 误读中文和版权字符。
+
+FFmpeg 的正常说明也可能写到标准错误流。`Read-FfmpegInformation` 使用 ProcessStartInfo 分别异步读取标准输出和标准错误，以真实退出码判断失败，避免 PowerShell 5.1 将普通说明转换为 NativeCommandError。设置 30 秒超时，finally 释放进程对象；两条管道同时读取，避免一方写满后互相等待。
 
 ```powershell
 if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $expected) { throw "原生运行库发生变化，必须重新审查：$name" }
