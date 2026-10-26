@@ -38,6 +38,7 @@ public sealed class MpvGlRenderer : IDisposable
 
     public void Resize(int width, int height)
     {
+        if (_stopping) return;
         Volatile.Write(ref _width, Math.Max(1, width));
         Volatile.Write(ref _height, Math.Max(1, height));
         Interlocked.Exchange(ref _resize, 1);
@@ -61,8 +62,8 @@ public sealed class MpvGlRenderer : IDisposable
                 Size = (ushort)Marshal.SizeOf<GlNative.PixelFormat>(),
                 Version = 1,
                 Flags = 0x4 | 0x20 | 0x1,
-                ColorBits = 32,
-                AlphaBits = 8,
+                ColorBits = 24,
+                AlphaBits = 0,
                 DepthBits = 0
             };
             int format = GlNative.ChoosePixelFormat(_dc, ref pfd);
@@ -79,8 +80,8 @@ public sealed class MpvGlRenderer : IDisposable
             MpvNative.Check(MpvNative.mpv_render_context_create(out render, _engine.NativeHandle, create));
             MpvNative.mpv_render_context_set_update_callback(render, _update, 0);
             _log.Information("GPU Render API ready: {Gpu}", Gpu);
-            Ready.TrySetResult();
             var fbo = new MpvNative.GlFbo();
+            bool? lastLoaded = null;
             int flip = 1, block = 0;
             MpvNative.RenderParam* args = stackalloc MpvNative.RenderParam[4];
             args[0] = new() { Type = 3, Data = (nint)(&fbo) };
@@ -93,9 +94,18 @@ public sealed class MpvGlRenderer : IDisposable
                 if (_stopping) break;
                 ulong flags = MpvNative.mpv_render_context_update(render);
                 bool resized = Interlocked.Exchange(ref _resize, 0) != 0;
-                if ((flags & 1) == 0 && !resized) continue;
+                bool loaded = _engine.State.IsLoaded;
+                if ((flags & 1) == 0 && !resized && lastLoaded == loaded) continue;
                 fbo.Width = Volatile.Read(ref _width); fbo.Height = Volatile.Read(ref _height);
                 MpvNative.Check(MpvNative.mpv_render_context_render(render, args));
+                if (!loaded)
+                {
+                    // 空闲/停止/失败时明确填满窗口缓冲，不能依赖视频首帧或上一次的显存内容。
+                    GlNative.glDisable(0x0C11); // 清屏不受之前的裁剪矩形限制。
+                    GlNative.glColorMask(1, 1, 1, 1);
+                    GlNative.glClearColor(8f / 255, 11f / 255, 18f / 255, 1);
+                    GlNative.glClear(0x00004000);
+                }
                 // 仅在显式验收模式中采样像素，正常播放不会从 GPU 回读画面。
                 if (CaptureVerificationSamples && _engine.State.IsLoaded) SampleFrame(fbo.Width, fbo.Height);
                 if (Interlocked.Exchange(ref _capture, null) is { } capture)
@@ -106,6 +116,9 @@ public sealed class MpvGlRenderer : IDisposable
                 if (!GlNative.SwapBuffers(_dc)) throw new Win32Exception();
                 MpvNative.mpv_render_context_report_swap(render);
                 Interlocked.Increment(ref _frames);
+                lastLoaded = loaded;
+                // Ready 表示已经呈现不透明首帧，不仅是 OpenGL 上下文创建成功。
+                Ready.TrySetResult();
             }
         }
         catch (Exception ex)

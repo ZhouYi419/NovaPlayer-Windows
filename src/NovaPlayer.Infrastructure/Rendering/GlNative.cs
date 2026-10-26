@@ -24,6 +24,10 @@ internal static class GlNative
     [DllImport("opengl32.dll")] internal static extern nint glGetString(uint name);
     [DllImport("opengl32.dll")] internal static extern void glReadPixels(int x, int y, int width, int height, uint format, uint type, nint pixels);
     [DllImport("opengl32.dll")] internal static extern void glReadBuffer(uint mode);
+    [DllImport("opengl32.dll")] internal static extern void glClearColor(float red, float green, float blue, float alpha);
+    [DllImport("opengl32.dll")] internal static extern void glClear(uint mask);
+    [DllImport("opengl32.dll")] internal static extern void glDisable(uint capability);
+    [DllImport("opengl32.dll")] internal static extern void glColorMask(byte red, byte green, byte blue, byte alpha);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] internal static extern nint GetModuleHandle(string name);
     [DllImport("kernel32.dll", CharSet = CharSet.Ansi)] internal static extern nint GetProcAddress(nint module, string name);
 }

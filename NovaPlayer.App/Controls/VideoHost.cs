@@ -41,6 +41,13 @@ public sealed class VideoHost : HwndHost
         var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
         Renderer.Resize((int)(ActualWidth * dpi.DpiScaleX), (int)(ActualHeight * dpi.DpiScaleY));
     }
+    protected override nint WndProc(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
+    {
+        // 原生窗口被擦除或重新显示时，即使视频暂停也要重绘，不能只等待下一帧解码回调。
+        if (message is 0x000F or 0x0014) ResizeRenderer();
+        return base.WndProc(hwnd, message, wParam, lParam, ref handled);
+    }
+    internal void InvalidateSurface() => InvalidateRect(_window, 0, true);
     public void StopRendering() => Renderer?.Dispose();
     protected override void DestroyWindowCore(HandleRef hwnd)
     {
@@ -51,7 +58,8 @@ public sealed class VideoHost : HwndHost
     private static ushort RegisterClass()
     {
         var wc = new WndClass { Style = 0x20, Procedure = Marshal.GetFunctionPointerForDelegate(Procedure),
-            Instance = GetModuleHandle(null), ClassName = "NovaPlayerGpuSurface" };
+            // 使用系统管理的黑色画刷兜底首帧和重绘间隙，不创建需要应用释放的 GDI 画刷。
+            Instance = GetModuleHandle(null), Background = GetStockObject(4), ClassName = "NovaPlayerGpuSurface" };
         var result = RegisterClassW(ref wc);
         if (result == 0) throw new Win32Exception();
         return result;
@@ -72,4 +80,6 @@ public sealed class VideoHost : HwndHost
     [DllImport("user32.dll")] private static extern nint GetDC(nint hwnd);
     [DllImport("user32.dll")] private static extern int ReleaseDC(nint hwnd, nint dc);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern nint GetModuleHandle(string? name);
+    [DllImport("gdi32.dll")] private static extern nint GetStockObject(int index);
+    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool InvalidateRect(nint hwnd, nint rectangle, [MarshalAs(UnmanagedType.Bool)] bool erase);
 }

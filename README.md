@@ -51,3 +51,5 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "E:\RiderFile\NovaPlayer
 成功后安装程序位于 `artifacts/release/1.0.0-rc.1/NovaPlayer-1.0.0-rc.1-win-x64-setup.exe`；再运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/Test-ReleaseManifest.ps1` 核对文件完整性。
 
 首次准备依赖和 NuGet 还原需要网络。程序播放本地视频时不需要网络。SDK 安装于 `.tools/dotnet`，不改变全局 SDK；构建脚本自动使用本地 SDK。
+
+视频区域的桌面穿透修复与原始像素验证见 [表面不透明修复记录](docs/surface-opacity-fix.md)。已安装版本需关闭旧窗口并覆盖安装重新生成的安装包，源码修改不会自动更新安装目录。

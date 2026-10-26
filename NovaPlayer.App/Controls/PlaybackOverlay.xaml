@@ -12,7 +12,18 @@
             <Setter Property="ToolTipService.ShowDuration" Value="2000" />
         </Style>
     </Window.Resources>
-    <Grid Background="#01080B12">
+    <Grid>
+        <Grid.Style>
+            <Style TargetType="Grid">
+                <Setter Property="Background" Value="#01080B12" />
+                <Style.Triggers>
+                    <!-- 未加载视频时由浮层自身绘制不透明底色，避免首帧尚未呈现时露出桌面。 -->
+                    <DataTrigger Binding="{Binding State.IsLoaded}" Value="False">
+                        <Setter Property="Background" Value="#FF080B12" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Grid.Style>
         <Grid x:Name="TopChrome" VerticalAlignment="Top" Height="110" Visibility="{Binding State.IsLoaded, Converter={StaticResource BoolVisibility}}">
             <Grid.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">

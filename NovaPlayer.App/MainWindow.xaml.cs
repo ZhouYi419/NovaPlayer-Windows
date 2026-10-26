@@ -81,7 +81,9 @@ public partial class MainWindow : Window
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             if (_args.Length >= 3 && _args[0].StartsWith("--verify", StringComparison.Ordinal))
             {
-                int exit = _args[0] == "--verify-release"
+                int exit = _args[0] == "--verify-opacity"
+                    ? await SurfaceOpacityVerification.RunAsync(this, _engine, renderer, _overlay!, _args[1], _args[2])
+                    : _args[0] == "--verify-release"
                     ? await StageFiveVerification.RunAsync(this, _engine, renderer, _overlay!, _args[1], _args[2])
                     : _args[0].StartsWith("--verify-experience", StringComparison.Ordinal)
                     ? await StageFourVerification.RunAsync(this, _engine, renderer, _overlay!, _args[0], _args[1], _args[2])
